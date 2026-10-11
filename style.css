@@ -1,0 +1,253 @@
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #121212;
+    color: #e0e0e0;
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px;
+}
+
+.card {
+    background: #1e1e1e;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    width: 100%;
+    max-width: 500px;
+}
+
+.header-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.header-images {
+    display: flex;
+    gap: 8px;
+}
+
+.description {
+    font-size: 0.9rem;
+    color: #cccccc;
+    margin-bottom: 25px;
+    line-height: 1.5;
+}
+
+.icon {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    image-rendering: pixelated;
+    border-radius: 4px;
+}
+
+h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    color: #ffffff;
+    line-height: 1.2;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.form-row .form-group {
+    flex: 1;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+    color: #b3b3b3;
+}
+
+input[type="text"],
+input[type="number"] {
+    width: 100%;
+    height: 42px;
+    padding: 10px;
+    background: #2d2d2d;
+    color: #ffffff;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+input::placeholder {
+    color: #888;
+}
+
+input:focus {
+    outline: none;
+    border-color: #0066cc;
+}
+
+.gender-toggle {
+    display: flex;
+    width: 100%;
+    height: 42px;
+    background: #2d2d2d;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.gender-toggle input[type="radio"] {
+    display: none;
+}
+
+.gender-toggle .toggle-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #888;
+    margin-bottom: 0;
+    transition: all 0.2s;
+}
+
+.gender-toggle input[type="radio"]:checked+.toggle-option {
+    background: #0066cc;
+    color: white;
+}
+
+.help-text {
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 4px;
+    display: block;
+}
+
+.info-icon {
+    color: #4da6ff;
+    cursor: help;
+    position: relative;
+    display: inline-block;
+    margin-left: 5px;
+    font-size: 1rem;
+}
+
+.info-icon .tooltip-text {
+    visibility: hidden;
+    width: 200px;
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+    text-align: center;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    padding: 8px;
+    position: absolute;
+    z-index: 10;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.8rem;
+    font-weight: normal;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.info-icon .tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #404040 transparent transparent transparent;
+}
+
+.info-icon:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 30px;
+}
+
+button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-primary {
+    background: #0066cc;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #0052a3;
+}
+
+.btn-secondary {
+    background: #333333;
+    color: #e0e0e0;
+}
+
+.btn-secondary:hover {
+    background: #444444;
+}
+
+#status {
+    margin-top: 15px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    text-align: center;
+}
+
+.error {
+    color: #ff6b6b;
+}
+
+.success {
+    color: #4caf50;
+}
+
+.footer {
+    margin-top: 30px;
+    padding-top: 15px;
+    border-top: 1px solid #333;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #888;
+}
+
+.footer a {
+    color: #4da6ff;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.footer a:hover {
+    color: #80bfff;
+    text-decoration: underline;
+}

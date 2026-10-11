@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catch Mew</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="card">
+        <div class="header-container">
+            <div class="header-images">
+                <img src="img/mew.png" alt="Mew" class="icon">
+                <img src="img/osm.png" alt="Old Sea Map" class="icon">
+            </div>
+            <h1>Catch Mew</h1>
+        </div>
+        <div class="description">
+            This creates a Japanese Pokémon Emerald save file pre-loaded with the Old Sea Map Faraway Island event. Enter your trainer name, gender, TID (optional), and SID (optional) below or pull the info from an existing save file to customize the generated save file.
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="trainer-name">
+                    Trainer Name
+                    <span class="info-icon">ⓘ
+                        <span class="tooltip-text">Max 5 characters, English letters will be converted to fullwidth glyphs.</span>
+                    </span>
+                </label>
+                <input type="text" id="trainer-name" maxlength="5" placeholder="サトシ or Ash">
+            </div>
+            <div class="form-group">
+                <label for="gender">
+                    Trainer Gender
+                    <span class="info-icon">ⓘ
+                        <span class="tooltip-text">Will always temporarily show the male sprite until after any screen transition.</span>
+                    </span>
+                </label>
+                <div class="gender-toggle">
+                    <input type="radio" id="gender-boy" name="gender" value="0" checked>
+                    <label for="gender-boy" class="toggle-option">♂</label>
+
+                    <input type="radio" id="gender-girl" name="gender" value="1">
+                    <label for="gender-girl" class="toggle-option">♀</label>
+                </div>
+            </div>
+        </div>
+        <div class="form-row">
+
+            <div class="form-group">
+                <label for="tid">
+                    Trainer ID (TID)
+                    <span class="info-icon">ⓘ
+                        <span class="tooltip-text">00000 - 65535</span>
+                    </span>
+                </label>
+                <input type="number" id="tid" maxlength="5" min="0" max="65535" placeholder="e.g., 12345">
+            </div>
+
+            <div class="form-group">
+                <label for="sid">
+                    Secret ID (SID)
+                    <span class="info-icon">ⓘ
+                        <span class="tooltip-text">00000 - 65535</span>
+                    </span>
+                </label>
+                <input type="number" id="sid" maxlength="5" min="0" max="65535" placeholder="e.g., 54321">
+            </div>
+        </div>
+        <div class="button-group">
+            <button class="btn-secondary" onclick="randomizeIDs()">Randomize IDs</button>
+            <input type="file" id="user-save-file" accept=".sav,.srm" style="display: none;">
+            <button class="btn-secondary" onclick="document.getElementById('user-save-file').click()">Load From Save</button>
+            <button class="btn-primary" onclick="generateSave()">Generate Save</button>
+        </div>
+
+        <div id="status"></div>
+
+        <div class="footer">
+            Issues? <a href="https://github.com/regularwave/catch-mew" target="_blank">Report them on GitHub.</a>
+        </div>
+    </div>
+
+    <script src="script.js" defer></script>
+</body>
+
+</html>
