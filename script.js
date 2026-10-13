@@ -275,7 +275,14 @@ async function generateSave() {
 
             // set trainer name
             for (let i = 0; i < 8; i++) {
-                const byteVal = i < name.length ? charMap[name[i]] : TERMINATOR;
+                let byteVal;
+                if (i < name.length) {
+                    byteVal = charMap[name[i]];
+                } else if (i < 6) {
+                    byteVal = TERMINATOR;
+                } else {
+                    byteVal = 0x00;
+                }
                 dataView.setUint8(sectorOffset + i, byteVal);
             }
 
