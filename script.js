@@ -99,24 +99,96 @@ for (const [char, hex] of Object.entries(charMap)) {
     reverseCharMap[hex] = char;
 }
 
-// find active save slot's sector 0 (keeps backwards compatibility for loading info)
-function getActiveSector0Offset(dataView) {
-    let latestSector0Offset = -1;
-    let maxSaveIndex = -1;
+const RAW_EMERALD_SAVE_SIZE = 0x20000;
+const SECTORS_PER_SAVE_SLOT = 14;
+const SAVE_SECTOR_SIGNATURE = 0x08012025;
+const SAVE_FOOTER = Object.freeze({
+    id: 0x0FF4,
+    checksum: 0x0FF6,
+    signature: 0x0FF8,
+    counter: 0x0FFC
+});
 
-    for (let i = 0; i < 28; i++) { // 14 sectors * 2 save slots
-        const offset = i * SECTOR_SIZE;
-        const sectorId = dataView.getUint16(offset + 0x0FF4, true);
-        const saveIndex = dataView.getUint32(offset + 0x0FF8, true);
+const EMERALD_SECTION_LENGTHS = Object.freeze([
+    0x0F2C,
+    0x0F80, 0x0F80, 0x0F80, 0x0F08,
+    0x0F80, 0x0F80, 0x0F80, 0x0F80,
+    0x0F80, 0x0F80, 0x0F80, 0x0F80, 0x07D0
+]);
 
-        if (sectorId === 0 && saveIndex > maxSaveIndex) {
-            maxSaveIndex = saveIndex;
-            latestSector0Offset = offset;
+function validateImportSize(byteLength) {
+    if (byteLength === RAW_EMERALD_SAVE_SIZE || byteLength === RAW_EMERALD_SAVE_SIZE + 16) {
+        return;
+    }
+    if (byteLength === 0x10000) {
+        throw new Error("64 KiB saves are not supported.");
+    }
+    throw new Error("Unknown save size: expected a 128 KiB save, optionally followed by a 16-byte RTC timestamp.");
+}
+
+function calculateImportSectionChecksum(dataView, offset, byteLength) {
+    let sum = 0;
+    for (let i = 0; i < byteLength; i += 4) {
+        sum = (sum + dataView.getUint32(offset + i, true)) >>> 0;
+    }
+    return ((sum & 0xFFFF) + (sum >>> 16)) & 0xFFFF;
+}
+
+function readValidSaveSlot(dataView, slotIndex) {
+    const start = slotIndex * SECTORS_PER_SAVE_SLOT * SECTOR_SIZE;
+    let sectionMask = 0;
+    let sector0Offset = -1;
+    let counter = null;
+
+    for (let i = 0; i < SECTORS_PER_SAVE_SLOT; i++) {
+        const offset = start + i * SECTOR_SIZE;
+        if (dataView.getUint32(offset + SAVE_FOOTER.signature, true) !== SAVE_SECTOR_SIGNATURE) {
+            return null;
         }
+
+        // check for out-of-range or duplicate ID
+        const sectionId = dataView.getUint16(offset + SAVE_FOOTER.id, true);
+        if (sectionId >= SECTORS_PER_SAVE_SLOT || (sectionMask & (1 << sectionId)) !== 0) {
+            return null;
+        }
+
+        const checksum = calculateImportSectionChecksum(dataView, offset, EMERALD_SECTION_LENGTHS[sectionId]);
+        if (dataView.getUint16(offset + SAVE_FOOTER.checksum, true) !== checksum) {
+            return null;
+        }
+
+        // don't treat sections from different save attempts as one save
+        const sectionCounter = dataView.getUint32(offset + SAVE_FOOTER.counter, true);
+        if (counter !== null && counter !== sectionCounter) {
+            return null;
+        }
+        counter = sectionCounter;
+        sectionMask |= 1 << sectionId;
+        if (sectionId === 0) sector0Offset = offset;
     }
 
-    if (latestSector0Offset === -1) throw new Error("Invalid save file structure: Sector 0 missing.");
-    return latestSector0Offset;
+    // require all 14 logical sections in the same slot
+    if (sectionMask !== (1 << SECTORS_PER_SAVE_SLOT) - 1) return null;
+    return { sector0Offset, counter };
+}
+
+function getActiveSector0Offset(dataView) {
+    validateImportSize(dataView.byteLength);
+    const first = readValidSaveSlot(dataView, 0);
+    const second = readValidSaveSlot(dataView, 1);
+
+    if (!first && !second) {
+        throw new Error("No complete, valid Emerald save slot was found. The file may be corrupted or use an unsupported save format.");
+    }
+    if (!first) return second.sector0Offset;
+    if (!second) return first.sector0Offset;
+
+    // match Emerald handling of the adjacent rollover pair
+    if (first.counter === 0xFFFFFFFF && second.counter === 0) return second.sector0Offset;
+    if (second.counter === 0xFFFFFFFF && first.counter === 0) return first.sector0Offset;
+
+    // equal counters use the first slot
+    return second.counter > first.counter ? second.sector0Offset : first.sector0Offset;
 }
 
 // find ALL sector 0 offsets across both save slots
@@ -202,13 +274,30 @@ function setStatus(msg, isError = false) {
     el.className = isError ? 'error' : 'success';
 }
 
+let trainerImportRequest = 0;
+
 // file parsing
 document.getElementById('user-save-file').addEventListener('change', function (event) {
     const file = event.target.files[0];
     if (!file) return;
 
+    const request = ++trainerImportRequest;
+    const clearFileInput = () => {
+        if (request === trainerImportRequest) event.target.value = '';
+    };
+
+    // reject unsupported sizes before allocating memory
+    try {
+        validateImportSize(file.size);
+    } catch (error) {
+        setStatus("Failed to read save: " + error.message, true);
+        clearFileInput();
+        return;
+    }
+
     const reader = new FileReader();
     reader.onload = function (e) {
+        if (request !== trainerImportRequest) return;
         try {
             const dataView = new DataView(e.target.result);
             const latestSector0Offset = getActiveSector0Offset(dataView);
@@ -216,6 +305,10 @@ document.getElementById('user-save-file').addEventListener('change', function (e
             const gender = dataView.getUint8(latestSector0Offset + 0x0008);
             const tid = dataView.getUint16(latestSector0Offset + 0x000A, true);
             const sid = dataView.getUint16(latestSector0Offset + 0x000C, true);
+
+            if (gender !== 0 && gender !== 1) {
+                throw new Error("The selected save contains an invalid trainer gender.");
+            }
 
             let name = "";
             for (let i = 0; i < 8; i++) {
@@ -238,11 +331,27 @@ document.getElementById('user-save-file').addEventListener('change', function (e
             console.error(error);
             setStatus("Failed to read save: " + error.message, true);
         }
-
-        event.target.value = '';
     };
 
-    reader.readAsArrayBuffer(file);
+    reader.onerror = function () {
+        if (request === trainerImportRequest) {
+            setStatus("Failed to read save: The file could not be read. Please select it again.", true);
+        }
+    };
+    reader.onabort = function () {
+        if (request === trainerImportRequest) {
+            setStatus("Save import cancelled. Trainer info entries were kept.", true);
+        }
+    };
+    // loadend runs after success, error, or abort so the same file can be retried
+    reader.onloadend = clearFileInput;
+
+    try {
+        reader.readAsArrayBuffer(file);
+    } catch (error) {
+        setStatus("Failed to read save: " + error.message, true);
+        clearFileInput();
+    }
 });
 
 async function generateSave() {

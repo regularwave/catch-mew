@@ -20,6 +20,7 @@ Generates a save file for Japanese Pokémon Emerald that has the Old Sea Map Far
 ### If you have an existing save file and want the same trainer name, gender, TID, and SID:
 1. Click the *Load From Save* button
 2. Select your current save file
+ - 128 KiB save files in *.sav* or *.srm* format with or without a 16-byte RTC timestamp at the end of the save file. Save states are not supported.
 3. Click the *Generate Save* button
 
 ### Save file format
@@ -34,9 +35,10 @@ The generated save file will have a *.sav* extension. If you need it to be *.srm
 4. Walk through the trees and enter the encounter area, startling Mew
 5. Chase Mew until you have it cornered and save before pressing A
 
-## Acknowledgements
+## Acknowledgements (in no particular order)
 * [**Project Pokemon**](https://projectpokemon.org) so much info
 * [**PKHeX**](https://github.com/kwsch/pkhex) save file research
 * [**PKHeXWC3Plugin**](https://github.com/Bl4ckSh4rk/PKHeXWC3Plugin) event injection research
 * [**JS-Finder**](https://github.com/lincoln-lm/JS-Finder/) Emerald TID/SID research
 * [**Bulbapedia**](https://bulbapedia.bulbagarden.net/) sprites, event research
+* [**Emerald decomp**](https://github.com/pret/pokeemerald) more details about save files
