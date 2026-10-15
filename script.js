@@ -87,6 +87,7 @@ for (const [char, hex] of Object.entries(charMap)) {
 }
 
 const RAW_EMERALD_SAVE_SIZE = 0x20000;
+const RTC_TRAILER_SIZE = 16;
 const SECTORS_PER_SAVE_SLOT = 14;
 const SAVE_SECTOR_SIGNATURE = 0x08012025;
 const SAVE_FOOTER = Object.freeze({
@@ -104,7 +105,7 @@ const EMERALD_SECTION_LENGTHS = Object.freeze([
 ]);
 
 function validateImportSize(byteLength) {
-    if (byteLength === RAW_EMERALD_SAVE_SIZE || byteLength === RAW_EMERALD_SAVE_SIZE + 16) {
+    if (byteLength === RAW_EMERALD_SAVE_SIZE || byteLength === RAW_EMERALD_SAVE_SIZE + RTC_TRAILER_SIZE) {
         return;
     }
     if (byteLength === 0x10000) {
@@ -113,7 +114,7 @@ function validateImportSize(byteLength) {
     throw new Error("Unknown save size: expected a 128 KiB save, optionally followed by a 16-byte RTC timestamp.");
 }
 
-function calculateImportSectionChecksum(dataView, offset, byteLength) {
+function calculateSectionChecksum(dataView, offset, byteLength) {
     let sum = 0;
     for (let i = 0; i < byteLength; i += 4) {
         sum = (sum + dataView.getUint32(offset + i, true)) >>> 0;
@@ -123,6 +124,7 @@ function calculateImportSectionChecksum(dataView, offset, byteLength) {
 
 function readValidSaveSlot(dataView, slotIndex) {
     const start = slotIndex * SECTORS_PER_SAVE_SLOT * SECTOR_SIZE;
+    const sectionOffsets = [];
     let sectionMask = 0;
     let sector0Offset = -1;
     let counter = null;
@@ -139,7 +141,7 @@ function readValidSaveSlot(dataView, slotIndex) {
             return null;
         }
 
-        const checksum = calculateImportSectionChecksum(dataView, offset, EMERALD_SECTION_LENGTHS[sectionId]);
+        const checksum = calculateSectionChecksum(dataView, offset, EMERALD_SECTION_LENGTHS[sectionId]);
         if (dataView.getUint16(offset + SAVE_FOOTER.checksum, true) !== checksum) {
             return null;
         }
@@ -151,12 +153,13 @@ function readValidSaveSlot(dataView, slotIndex) {
         }
         counter = sectionCounter;
         sectionMask |= 1 << sectionId;
+        sectionOffsets[sectionId] = offset;
         if (sectionId === 0) sector0Offset = offset;
     }
 
     // require all 14 logical sections in the same slot
     if (sectionMask !== (1 << SECTORS_PER_SAVE_SLOT) - 1) return null;
-    return { sector0Offset, counter };
+    return { sector0Offset, counter, sectionOffsets };
 }
 
 function getActiveSector0Offset(dataView) {
@@ -178,18 +181,57 @@ function getActiveSector0Offset(dataView) {
     return second.counter > first.counter ? second.sector0Offset : first.sector0Offset;
 }
 
-// find ALL sector 0 offsets across both save slots
-function getAllSector0Offsets(dataView) {
-    let offsets = [];
-    for (let i = 0; i < 28; i++) { // 14 sectors * 2 save slots
-        const offset = i * SECTOR_SIZE;
-        const sectorId = dataView.getUint16(offset + 0x0FF4, true);
-        if (sectorId === 0) {
-            offsets.push(offset);
+function validateTemplateSlot(dataView, slot) {
+    const block1Offset = logicalOffset =>
+        slot.sectionOffsets[1 + Math.floor(logicalOffset / 0xF80)] + logicalOffset % 0xF80;
+    const byte = logicalOffset => dataView.getUint8(block1Offset(logicalOffset));
+    const word = logicalOffset => dataView.getUint16(block1Offset(logicalOffset), true);
+    const flag = id => (byte(0x1270 + (id >>> 3)) & (1 << (id & 7))) !== 0;
+
+    const bagKey = dataView.getUint16(slot.sector0Offset + 0xAC, true);
+    const itemQuantity = (pocketOffset, count, itemId) => {
+        let quantity = 0;
+        for (let i = 0; i < count; i++) {
+            const offset = pocketOffset + i * 4;
+            if (word(offset) === itemId) quantity += word(offset + 2) ^ bagKey;
         }
+        return quantity;
+    };
+
+    if (!flag(0x864) || !flag(0x8D6)) { // GAME_CLEAR, ENABLE_SHIP_FARAWAY_ISLAND
+        throw new Error("Faraway Island ferry access is not enabled.");
     }
-    if (offsets.length === 0) throw new Error("Invalid save file structure: No Sector 0 found.");
-    return offsets;
+    if (flag(0x1C7) || flag(0x1CA)) { // DEFEATED_MEW, CAUGHT_MEW
+        throw new Error("The Mew encounter has already been completed.");
+    }
+    if (!flag(0x13C) || flag(0x1B0)) { // RECEIVED_OLD_SEA_MAP, SHOWN_OLD_SEA_MAP
+        throw new Error("The Old Sea Map event is not in its expected initial state.");
+    }
+    if (itemQuantity(0x5D8, 30, 0x178) !== 1) { // Key Item: Old Sea Map
+        throw new Error("The expected Old Sea Map is missing.");
+    }
+    // Starting map: group 13, map 6 (Lilycove Pokemon Center 1F), x=7, y=4.
+    if (byte(4) !== 13 || byte(5) !== 6 || word(0) !== 7 || word(2) !== 4) {
+        throw new Error("The prepared starting location has changed.");
+    }
+}
+
+function prepareTemplateSave(templateBuffer) {
+    try {
+        validateImportSize(templateBuffer.byteLength);
+        const buffer = templateBuffer.slice(0, RAW_EMERALD_SAVE_SIZE);
+        const dataView = new DataView(buffer);
+        const sector0Offsets = [];
+        for (let slotIndex = 0; slotIndex < 2; slotIndex++) {
+            const slot = readValidSaveSlot(dataView, slotIndex);
+            if (!slot) throw new Error(`Save slot ${slotIndex + 1} is incomplete or corrupt.`);
+            validateTemplateSlot(dataView, slot);
+            sector0Offsets.push(slot.sector0Offset);
+        }
+        return { buffer, sector0Offsets };
+    } catch (error) {
+        throw new Error("Save template failed an integrity check: " + error.message);
+    }
 }
 
 function parseTrainerID(rawValue, label) {
@@ -347,15 +389,6 @@ function setupTrainerNameInput() {
 
 setupTrainerNameInput();
 
-// calculate checksum
-function calculateChecksum(dataView, offset) {
-    let sum = 0;
-    for (let i = 0; i < 0x0F80; i += 4) {
-        sum += dataView.getUint32(offset + i, true);
-    }
-    return ((sum & 0xFFFF) + (sum >>> 16)) & 0xFFFF;
-}
-
 const MIN_ID_ADVANCES = 1000;
 const ID_ADVANCE_COUNT = 5000;
 
@@ -483,11 +516,8 @@ async function generateSave() {
 
         setStatus("Processing...");
 
-        const buffer = base64ToArrayBuffer(TEMPLATE_SAVE_B64);
+        const { buffer, sector0Offsets } = prepareTemplateSave(base64ToArrayBuffer(TEMPLATE_SAVE_B64));
         const dataView = new DataView(buffer);
-
-        // get all sector 0 offsets
-        const sector0Offsets = getAllSector0Offsets(dataView);
 
         // overwrite both slots of the save file
         for (const sectorOffset of sector0Offsets) {
@@ -501,9 +531,9 @@ async function generateSave() {
                 dataView.setUint8(sectorOffset + i, nameBytes[i]);
             }
 
-            // recalculate checksum for this half
-            const checksum = calculateChecksum(dataView, sectorOffset);
-            dataView.setUint16(sectorOffset + 0x0FF6, checksum, true);
+            // recalculate checksum
+            const checksum = calculateSectionChecksum(dataView, sectorOffset, EMERALD_SECTION_LENGTHS[0]);
+            dataView.setUint16(sectorOffset + SAVE_FOOTER.checksum, checksum, true);
         }
 
         // trigger download

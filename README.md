@@ -27,6 +27,19 @@ Not all TID/SID pairs are valid because of the way Emerald generates them. Click
 ### Trainer names
 The preview shows how the trainer name will be rendered in game. Trainer names are limited to five characters *after* encoding and normalization. While leading, internal, and trailing spaces are preserved, a name cannot consist entirely of spaces. ASCII letters, digits, spaces, and `! ? . / :` become their fullwidth equivalents. Dashes (`-` and `−`) are converted to the Japanese long-vowel mark `ー`. The `‥` and `⋯` characters are converted to `…`. Halfwidth kana and combining dakuten/handakuten are normalized where a matching game character exists.
 
+### Template save info
+The template save has the following relevant flags and info set:
+| Property | Value |
+| --- | --- |
+| Starting location | Lilycove Pokemon Center 1F; map group 13, map 6; x=7, y=4 |
+| Game-clear flag (`0x864`) | Set |
+| Faraway Island ferry flag (`0x8D6`) | Set |
+| Old Sea Map received (`0x13C`) | Set |
+| Old Sea Map shown (`0x1B0`) | Not set |
+| Mew defeated (`0x1C7`) | Not set |
+| Mew caught (`0x1CA`) | Not set |
+| Old Sea Map (`0x178`) | One in the Key Items pocket |
+
 ### Save file format
 The generated save file will have a *.sav* extension. If you need it to be *.srm* you can just rename the file extension.
 
