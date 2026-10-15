@@ -1,4 +1,6 @@
 const charMap = {
+    '　': 0x00,
+
     // Hiragana
     'あ': 0x01, 'い': 0x02, 'う': 0x03, 'え': 0x04, 'お': 0x05,
     'か': 0x06, 'き': 0x07, 'く': 0x08, 'け': 0x09, 'こ': 0x0A,
@@ -38,11 +40,11 @@ const charMap = {
     // Numbers and Symbols (Fullwidth equivalents)
     '０': 0xA1, '１': 0xA2, '２': 0xA3, '３': 0xA4, '４': 0xA5,
     '５': 0xA6, '６': 0xA7, '７': 0xA8, '８': 0xA9, '９': 0xAA,
-    '！': 0xAB, '？': 0xAC, '。': 0xAD, '−': 0xAE, '・': 0xAF,
+    '！': 0xAB, '？': 0xAC, '。': 0xAD, 'ー': 0xAE, '・': 0xAF,
 
     // Extended Japanese Symbols
-    '‥': 0xB0, '『': 0xB1, '』': 0xB2, '「': 0xB3, '」': 0xB4,
-    '♂': 0xB5, '♀': 0xB6, '．': 0xB8, '／': 0xBA,
+    '…': 0xB0, '『': 0xB1, '』': 0xB2, '「': 0xB3, '」': 0xB4,
+    '♂': 0xB5, '♀': 0xB6, '円': 0xB7, '．': 0xB8, '×': 0xB9, '／': 0xBA,
 
     // English letters available on the Japanese keyboard 
     'Ａ': 0xBB, 'Ｂ': 0xBC, 'Ｃ': 0xBD, 'Ｄ': 0xBE, 'Ｅ': 0xBF, 'Ｆ': 0xC0,
@@ -55,7 +57,12 @@ const charMap = {
     'ｇ': 0xDB, 'ｈ': 0xDC, 'ｉ': 0xDD, 'ｊ': 0xDE, 'ｋ': 0xDF, 'ｌ': 0xE0,
     'ｍ': 0xE1, 'ｎ': 0xE2, 'ｏ': 0xE3, 'ｐ': 0xE4, 'ｑ': 0xE5, 'ｒ': 0xE6,
     'ｓ': 0xE7, 'ｔ': 0xE8, 'ｕ': 0xE9, 'ｖ': 0xEA, 'ｗ': 0xEB, 'ｘ': 0xEC,
-    'ｙ': 0xED, 'ｚ': 0xEE, '►': 0xEF, '：': 0xF0
+    'ｙ': 0xED, 'ｚ': 0xEE, '►': 0xEF, '：': 0xF0,
+
+    // these are also printable glyphs in the Japanese Gen 3 table according to PKHeX G3_JP
+    // 0xFC-0xFE text controls; 0xFF terminator
+    'Ä': 0xF1, 'Ö': 0xF2, 'Ü': 0xF3, 'ä': 0xF4, 'ö': 0xF5, 'ü': 0xF6,
+    '↑': 0xF7, '↓': 0xF8, '←': 0xF9, '→': 0xFA, '＋': 0xFB
 };
 
 const SECTOR_SIZE = 4096;
@@ -225,18 +232,129 @@ function toFullwidth(str) {
     });
 }
 
-// ensure every character exists in the GBA charMap
-function sanitizeTrainerName(rawName) {
-    const convertedName = toFullwidth(rawName);
-    let cleanName = "";
+const MAX_TRAINER_NAME_LENGTH = 5;
+const TRAINER_NAME_FIELD_SIZE = 8;
 
-    for (let i = 0; i < convertedName.length; i++) {
-        if (charMap[convertedName[i]] !== undefined) {
-            cleanName += convertedName[i];
-        }
-    }
-    return cleanName.substring(0, 5);
+// input aliases are separate from charMap: decoding a saved byte must always return the game's canonical glyph, not whichever alias was declared last
+const TRAINER_NAME_ALIASES = Object.freeze({
+    ' ': '　', '!': '！', '?': '？', '.': '．', '/': '／', ':': '：', '-': 'ー', '−': 'ー', '‥': '…', '⋯': '…'
+});
+
+function normalizeTrainerName(rawName) {
+    // normalize halfwidth kana locally (applying NFKC to the entire name would expand an ellipsis into three periods and change its encoded length)
+    const composed = rawName
+        .replace(/[\uFF61-\uFF9F]+/gu, run => run.normalize('NFKC'))
+        .normalize('NFC'); // e.g. か + combining dakuten becomes が
+    return Array.from(toFullwidth(composed), char => TRAINER_NAME_ALIASES[char] ?? char).join('');
 }
+
+function validateTrainerName(rawName) {
+    const name = normalizeTrainerName(rawName);
+    const characters = Array.from(name);
+    if (characters.length === 0 || characters.every(char => char === '　')) {
+        throw new Error("Enter a trainer name with at least one non-space character.");
+    }
+
+    const unsupported = [...new Set(characters.filter(char => charMap[char] === undefined))];
+    if (unsupported.length > 0) {
+        const details = unsupported.map(char => {
+            const code = char.codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
+            return `${JSON.stringify(char)} (U+${code})`;
+        }).join(', ');
+        throw new Error(`Unsupported trainer-name character(s): ${details}.`);
+    }
+    if (characters.length > MAX_TRAINER_NAME_LENGTH) {
+        throw new Error(`Trainer name has ${characters.length} characters after conversion; Japanese Emerald allows ${MAX_TRAINER_NAME_LENGTH}.`);
+    }
+    return name;
+}
+
+function decodeTrainerName(dataView, offset) {
+    // preliminary support for pulling trainer data from non-Japanese saves
+    // only decode unambiguous Latin letters/digits/spaces: interpreting international accented letters as Japanese bytes yields kana
+    const japanese = dataView.getUint16(offset + 6, true) === 0;
+    let name = "";
+    for (let i = 0; i < TRAINER_NAME_FIELD_SIZE; i++) {
+        const byte = dataView.getUint8(offset + i);
+        if (byte === TERMINATOR) return validateTrainerName(name);
+
+        let char;
+        if (japanese) {
+            char = reverseCharMap[byte];
+        } else if (byte === 0) {
+            char = ' ';
+        } else if (byte >= 0xA1 && byte <= 0xAA) {
+            char = String.fromCharCode(48 + byte - 0xA1);
+        } else if (byte >= 0xBB && byte <= 0xD4) {
+            char = String.fromCharCode(65 + byte - 0xBB);
+        } else if (byte >= 0xD5 && byte <= 0xEE) {
+            char = String.fromCharCode(97 + byte - 0xD5);
+        }
+        if (char === undefined) {
+            const hex = byte.toString(16).toUpperCase().padStart(2, '0');
+            throw new Error(`Cannot safely import trainer-name byte 0x${hex}. International imports support only Latin letters, digits, and spaces; Japanese names must use printable characters. Enter a compatible name and trainer details manually.`);
+        }
+        name += char;
+    }
+    throw new Error("The imported trainer name has no terminator. Trainer details were not changed.");
+}
+
+function encodeTrainerName(rawName) {
+    const name = validateTrainerName(rawName);
+    // up to 5 Japanese characters + 0xFF terminator padding + 2 0x00 alignment bytes
+    const bytes = new Uint8Array(TRAINER_NAME_FIELD_SIZE);
+    bytes.fill(TERMINATOR, 0, MAX_TRAINER_NAME_LENGTH + 1);
+    Array.from(name).forEach((char, i) => { bytes[i] = charMap[char]; });
+    return bytes;
+}
+
+let trainerNameIsComposing = false;
+
+function updateTrainerNamePreview() {
+    const input = document.getElementById('trainer-name');
+    const preview = document.getElementById('trainer-name-preview');
+    try {
+        const name = validateTrainerName(input.value);
+        preview.textContent = `Name in save: 「${name}」 (${Array.from(name).length}/${MAX_TRAINER_NAME_LENGTH})`;
+        preview.className = 'help-text';
+        input.setAttribute('aria-invalid', 'false');
+    } catch (error) {
+        const empty = input.value.length === 0;
+        preview.textContent = empty ? "Enter a name to preview (maximum 5 characters)." : error.message;
+        preview.className = empty ? 'help-text' : 'help-text error';
+        input.setAttribute('aria-invalid', String(!empty));
+    }
+}
+
+function setupTrainerNameInput() {
+    const input = document.getElementById('trainer-name');
+    // validate encoded characters ourselves after IME composition
+    input.removeAttribute('maxlength');
+    const preview = document.createElement('div');
+    preview.id = 'trainer-name-preview';
+    preview.setAttribute('role', 'status');
+    preview.setAttribute('aria-live', 'polite');
+    preview.setAttribute('aria-atomic', 'true');
+    preview.style.whiteSpace = 'pre-wrap';
+    preview.style.marginBottom = '20px';
+    // put below the whole row to keep the name and gender inputs aligned
+    const row = input.closest('.form-row');
+    (row || input).insertAdjacentElement('afterend', preview);
+    const descriptions = new Set((input.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
+    descriptions.add(preview.id);
+    input.setAttribute('aria-describedby', [...descriptions].join(' '));
+    input.addEventListener('input', event => {
+        if (!trainerNameIsComposing && !event.isComposing) updateTrainerNamePreview();
+    });
+    input.addEventListener('compositionstart', () => { trainerNameIsComposing = true; });
+    input.addEventListener('compositionend', () => {
+        trainerNameIsComposing = false;
+        updateTrainerNamePreview();
+    });
+    updateTrainerNamePreview();
+}
+
+setupTrainerNameInput();
 
 // calculate checksum
 function calculateChecksum(dataView, offset) {
@@ -310,12 +428,7 @@ document.getElementById('user-save-file').addEventListener('change', function (e
                 throw new Error("The selected save contains an invalid trainer gender.");
             }
 
-            let name = "";
-            for (let i = 0; i < 8; i++) {
-                const charHex = dataView.getUint8(latestSector0Offset + i);
-                if (charHex === TERMINATOR) break;
-                if (reverseCharMap[charHex]) name += reverseCharMap[charHex];
-            }
+            const name = decodeTrainerName(dataView, latestSector0Offset);
 
             document.getElementById('trainer-name').value = name;
             if (gender === 1) {
@@ -325,6 +438,7 @@ document.getElementById('user-save-file').addEventListener('change', function (e
             }
             document.getElementById('tid').value = tid;
             document.getElementById('sid').value = sid;
+            updateTrainerNamePreview(); // fire input events
 
             setStatus("Loaded trainer info from save!");
         } catch (error) {
@@ -356,12 +470,12 @@ document.getElementById('user-save-file').addEventListener('change', function (e
 
 async function generateSave() {
     try {
-        const rawName = document.getElementById('trainer-name').value;
-        const name = sanitizeTrainerName(rawName);
-
-        if (name.length === 0) {
-            throw new Error("Trainer name contains no valid characters.");
+        if (trainerNameIsComposing) {
+            throw new Error("Finish entering the trainer name before generating the save.");
         }
+        const rawName = document.getElementById('trainer-name').value;
+        updateTrainerNamePreview();
+        const nameBytes = encodeTrainerName(rawName); // validate before IDs or template bytes change.
 
         const tid = validateID('tid', 'TID');
         const sid = validateID('sid', 'SID');
@@ -382,17 +496,9 @@ async function generateSave() {
             dataView.setUint16(sectorOffset + 0x000A, tid, true);
             dataView.setUint16(sectorOffset + 0x000C, sid, true);
 
-            // set trainer name
-            for (let i = 0; i < 8; i++) {
-                let byteVal;
-                if (i < name.length) {
-                    byteVal = charMap[name[i]];
-                } else if (i < 6) {
-                    byteVal = TERMINATOR;
-                } else {
-                    byteVal = 0x00;
-                }
-                dataView.setUint8(sectorOffset + i, byteVal);
+            // write the same validated name, terminator, and padding into both slots
+            for (let i = 0; i < nameBytes.length; i++) {
+                dataView.setUint8(sectorOffset + i, nameBytes[i]);
             }
 
             // recalculate checksum for this half

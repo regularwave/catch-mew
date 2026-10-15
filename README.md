@@ -23,6 +23,9 @@ Generates a save file for Japanese Pokémon Emerald that has the Old Sea Map Far
  - 128 KiB save files in *.sav* or *.srm* format with or without a 16-byte RTC timestamp at the end of the save file. Save states are not supported.
 3. Click the *Generate Save* button
 
+### Trainer names
+The preview shows how the trainer name will be rendered in game. Trainer names are limited to five characters *after* encoding and normalization. While leading, internal, and trailing spaces are preserved, a name cannot consist entirely of spaces. ASCII letters, digits, spaces, and `! ? . / :` become their fullwidth equivalents. Dashes (`-` and `−`) are converted to the Japanese long-vowel mark `ー`. The `‥` and `⋯` characters are converted to `…`. Halfwidth kana and combining dakuten/handakuten are normalized where a matching game character exists.
+
 ### Save file format
 The generated save file will have a *.sav* extension. If you need it to be *.srm* you can just rename the file extension.
 
