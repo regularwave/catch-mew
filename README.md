@@ -1,13 +1,14 @@
 # catch-mew
 Generates a save file for Japanese Pokémon Emerald that has the Old Sea Map Faraway Island event active.
 
-**TID/SID generation:** Not all TID/SID pairs are valid because of the way Emerald generates them. The *Generate IDs* button emulates the method the game uses, but you can override and use (potentially) invalid IDs by entering them yourself.
+**TID/SID generation:** 
+Not all TID/SID pairs are valid because of the way Emerald generates them. Clicking the *Randomize IDs* or *Generate Save* button with both ID fields blank attempts to generate a TID/SID pair by modeling the ID relationship on the method the game uses. You can override this behavior by manually entering a TID/SID pair or providing a save file from which the pair can be imported.
 
 ## Usage
 ### If you just want a save that you can use to catch Mew:
 1. Enter a trainer name
 2. Set the trainer gender
-3. Click the *Randomize IDs* button
+3. Leave both ID fields blank, or click *Randomize IDs* to preview a new pair
 4. Click the *Generate Save* button
 
 ### If you have known trainer name, gender, TID, and SID you want to use:
@@ -44,4 +45,4 @@ The generated save file will have a *.sav* extension. If you need it to be *.srm
 * [**PKHeXWC3Plugin**](https://github.com/Bl4ckSh4rk/PKHeXWC3Plugin) event injection research
 * [**JS-Finder**](https://github.com/lincoln-lm/JS-Finder/) Emerald TID/SID research
 * [**Bulbapedia**](https://bulbapedia.bulbagarden.net/) sprites, event research
-* [**Emerald decomp**](https://github.com/pret/pokeemerald) more details about save files
+* [**Emerald decomp**](https://github.com/pret/pokeemerald) more details about save files and TID/SID generation

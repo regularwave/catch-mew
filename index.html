@@ -57,7 +57,7 @@
                         <span class="tooltip-text">00000 - 65535</span>
                     </span>
                 </label>
-                <input type="number" id="tid" maxlength="5" min="0" max="65535" placeholder="e.g., 12345">
+                <input type="text" inputmode="numeric" pattern="[0-9]+" id="tid" aria-describedby="trainer-id-help" placeholder="e.g., 12345">
             </div>
 
             <div class="form-group">
@@ -67,9 +67,10 @@
                         <span class="tooltip-text">00000 - 65535</span>
                     </span>
                 </label>
-                <input type="number" id="sid" maxlength="5" min="0" max="65535" placeholder="e.g., 54321">
+                <input type="text" inputmode="numeric" pattern="[0-9]+" id="sid" aria-describedby="trainer-id-help" placeholder="e.g., 54321">
             </div>
         </div>
+        <p id="trainer-id-help" class="help-text">Enter both IDs (0–65535), or leave both blank to generate a pair. Randomize IDs replaces both values.</p>
         <div class="button-group">
             <button class="btn-secondary" onclick="randomizeIDs()">Randomize IDs</button>
             <input type="file" id="user-save-file" accept=".sav,.srm" style="display: none;">
