@@ -5,87 +5,468 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Catch Mew</title>
-
     <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
 </head>
 
 <body>
-
-    <div class="card">
-        <div class="header-container">
+    <main class="card">
+        <header class="header-container">
             <div class="header-images">
-                <img src="img/mew.png" alt="Mew" class="icon">
-                <img src="img/osm.png" alt="Old Sea Map" class="icon">
+                <img src="img/mew.png" alt="Mew" class="icon" width="40" height="40">
+                <img src="img/osm.png" alt="Old Sea Map" class="icon" width="40" height="40">
             </div>
             <h1>Catch Mew</h1>
+        </header>
+        <div class="tabs" role="tablist" aria-label="Catch Mew tools">
+            <button type="button" id="tab-save" role="tab" aria-selected="true" aria-controls="panel-save" tabindex="0">Create save</button>
+            <button type="button" id="tab-walkthrough" role="tab" aria-selected="false" aria-controls="panel-walkthrough" tabindex="-1">Walkthrough</button>
+            <button type="button" id="tab-finder" role="tab" aria-selected="false" aria-controls="panel-finder" tabindex="-1">Mew finder</button>
         </div>
-        <div class="description">
-            This creates a Japanese Pokémon Emerald save file pre-loaded with the Old Sea Map Faraway Island event. Enter your trainer name, gender, TID (optional), and SID (optional) below or pull the info from an existing save file to customize the generated save file.
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="trainer-name">
-                    Trainer Name
-                    <span class="info-icon">ⓘ
-                        <span class="tooltip-text">Max 5 characters, English letters will be converted to fullwidth glyphs.</span>
-                    </span>
-                </label>
-                <input type="text" id="trainer-name" maxlength="5" placeholder="サトシ or Ash">
-            </div>
-            <div class="form-group">
-                <label for="gender">
-                    Trainer Gender
-                    <span class="info-icon">ⓘ
-                        <span class="tooltip-text">Will always temporarily show the male sprite until after any screen transition.</span>
-                    </span>
-                </label>
-                <div class="gender-toggle">
-                    <input type="radio" id="gender-boy" name="gender" value="0" checked>
-                    <label for="gender-boy" class="toggle-option">♂</label>
-
-                    <input type="radio" id="gender-girl" name="gender" value="1">
-                    <label for="gender-girl" class="toggle-option">♀</label>
+        <section id="panel-save" role="tabpanel" aria-labelledby="tab-save">
+            <p class="description">
+                Create a Japanese Pokémon Emerald save file pre-loaded with the Old Sea Map Faraway Island event. Enter your trainer details, or load them from an existing save. Supply both IDs, or leave both blank to generate a pair.
+            </p>
+            <form id="save-form" novalidate>
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="trainer-name">
+                                Trainer name
+                            </label>
+                            <button type="button" class="info-button" aria-label="About trainer names" aria-expanded="false" aria-controls="trainer-name-help">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <circle cx="12" cy="12" r="9" />
+                                    <path d="M12 11v6" />
+                                    <circle class="info-dot" cx="12" cy="7.5" r="1" />
+                                </svg>
+                            </button>
+                        </div>
+                        <input type="text" id="trainer-name" placeholder="サトシ, Ash, etc." autocomplete="off" spellcheck="false" aria-describedby="trainer-name-preview trainer-name-help">
+                    </div>
+                    <fieldset class="form-group gender-group">
+                        <legend class="label-row">
+                            Trainer gender
+                            <button type="button" class="info-button" aria-label="About trainer gender" aria-expanded="false" aria-controls="trainer-gender-help">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <circle cx="12" cy="12" r="9" />
+                                    <path d="M12 11v6" />
+                                    <circle class="info-dot" cx="12" cy="7.5" r="1" />
+                                </svg>
+                            </button>
+                        </legend>
+                        <div class="gender-toggle">
+                            <input type="radio" id="gender-boy" name="gender" value="0" checked>
+                            <label for="gender-boy" class="toggle-option">
+                                Male
+                            </label>
+                            <input type="radio" id="gender-girl" name="gender" value="1">
+                            <label for="gender-girl" class="toggle-option">
+                                Female
+                            </label>
+                        </div>
+                    </fieldset>
                 </div>
+                <p id="trainer-name-help" class="help-box" hidden>
+                    Maximum five characters after normalization.
+                </p>
+                <p id="trainer-gender-help" class="help-box" hidden>
+                    When starting the game the male sprite is always temporarily shown - the selected gender appears after a screen transition.
+                </p>
+                <div id="trainer-name-preview" class="help-text" role="status" aria-live="polite" aria-atomic="true">
+                    Enter a name to preview (maximum 5 characters).
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="tid">
+                            Trainer ID (TID)
+                        </label>
+                        <input type="text" inputmode="numeric" id="tid" aria-describedby="trainer-id-help" placeholder="e.g., 12345">
+                    </div>
+                    <div class="form-group">
+                        <label for="sid">
+                            Secret ID (SID)
+                        </label>
+                        <input type="text" inputmode="numeric" id="sid" aria-describedby="trainer-id-help" placeholder="e.g., 54321">
+                    </div>
+                </div>
+                <p id="trainer-id-help" class="help-text">
+                    Enter both IDs (0-65535), or leave both blank to generate a pair. The 'Randomize IDs' button replaces both values.
+                </p>
+                <div class="button-group">
+                    <button type="button" id="randomize-ids" class="btn-secondary">Randomize IDs</button>
+                    <input type="file" id="user-save-file" accept=".sav,.srm" hidden>
+                    <button type="button" id="load-save" class="btn-secondary">Load from save</button>
+                    <button type="submit" class="btn-primary">Generate save</button>
+                </div>
+                <div id="status" role="status" aria-live="polite" aria-atomic="true">
+                </div>
+            </form>
+        </section>
+        <section id="panel-walkthrough" role="tabpanel" aria-labelledby="tab-walkthrough" hidden>
+            <p class="description">
+                Coming soon!
+            </p>
+            <div class="walkthrough-pane" role="region" aria-label="Faraway Island walkthrough" tabindex="0">
+                <article>
+                    Coming soon!
+                    <!-- write walkthrough -->
+                </article>
             </div>
-        </div>
-        <div class="form-row">
-
-            <div class="form-group">
-                <label for="tid">
-                    Trainer ID (TID)
-                    <span class="info-icon">ⓘ
-                        <span class="tooltip-text">00000 - 65535</span>
-                    </span>
-                </label>
-                <input type="text" inputmode="numeric" pattern="[0-9]+" id="tid" aria-describedby="trainer-id-help" placeholder="e.g., 12345">
-            </div>
-
-            <div class="form-group">
-                <label for="sid">
-                    Secret ID (SID)
-                    <span class="info-icon">ⓘ
-                        <span class="tooltip-text">00000 - 65535</span>
-                    </span>
-                </label>
-                <input type="text" inputmode="numeric" pattern="[0-9]+" id="sid" aria-describedby="trainer-id-help" placeholder="e.g., 54321">
-            </div>
-        </div>
-        <p id="trainer-id-help" class="help-text">Enter both IDs (0–65535), or leave both blank to generate a pair. Randomize IDs replaces both values.</p>
-        <div class="button-group">
-            <button class="btn-secondary" onclick="randomizeIDs()">Randomize IDs</button>
-            <input type="file" id="user-save-file" accept=".sav,.srm" style="display: none;">
-            <button class="btn-secondary" onclick="document.getElementById('user-save-file').click()">Load From Save</button>
-            <button class="btn-primary" onclick="generateSave()">Generate Save</button>
-        </div>
-
-        <div id="status"></div>
-
-        <div class="footer">
-            Issues? <a href="https://github.com/regularwave/catch-mew" target="_blank">Report them on GitHub.</a>
-        </div>
-    </div>
-
-    <script src="script.js" defer></script>
+        </section>
+        <section id="panel-finder" role="tabpanel" aria-labelledby="tab-finder" hidden>
+            <form id="finder-form" novalidate>
+                <fieldset id="finder-fields" aria-label="Mew search settings and filters">
+                    <div class="finder-trainer-row">
+                        <div class="form-group">
+                            <label for="finder-tid">
+                                Trainer ID (TID)
+                            </label>
+                            <input type="text" inputmode="numeric" id="finder-tid" value="" aria-describedby="finder-trainer-note">
+                        </div>
+                        <div class="form-group">
+                            <label for="finder-sid">
+                                Secret ID (SID)
+                            </label>
+                            <input type="text" inputmode="numeric" id="finder-sid" value="" aria-describedby="finder-trainer-note">
+                        </div>
+                        <button type="button" id="finder-copy-ids" class="btn-secondary">Use trainer IDs</button>
+                    </div>
+                    <p id="finder-trainer-note" class="help-text finder-note">
+                        'Use trainer IDs' button copies from Create save tab; otherwise these fields are independent.
+                    </p>
+                    <div class="finder-panels">
+                        <section class="finder-panel" aria-labelledby="finder-search-title">
+                            <div class="finder-panel-heading">
+                                <h2 id="finder-search-title">Search settings</h2>
+                                <button type="button" class="btn-secondary finder-reset" aria-label="Reset search settings" title="Reset search settings to defaults">
+                                    <svg viewBox="0 -960 960 960" aria-hidden="true" focusable="false">
+                                        <path d="M520-330v-60h160v60H520Zm60 210v-50h-60v-60h60v-50h60v160h-60Zm100-50v-60h160v60H680Zm40-110v-160h60v50h60v60h-60v50h-60Zm111-280h-83q-26-88-99-144t-169-56q-117 0-198.5 81.5T200-480q0 72 32.5 132t87.5 98v-110h80v240H160v-80h94q-62-50-98-122.5T120-480q0-75 28.5-140.5t77-114q48.5-48.5 114-77T480-840q129 0 226.5 79.5T831-560Z" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="finder-search-grid">
+                                <div class="form-group">
+                                    <label for="finder-seed">
+                                        Seed (hex)
+                                    </label>
+                                    <input type="text" id="finder-seed" value="00000000" autocomplete="off" spellcheck="false">
+                                </div>
+                                <div class="form-group">
+                                    <label for="finder-start">
+                                        Start advance
+                                    </label>
+                                    <input type="text" inputmode="numeric" id="finder-start" value="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="finder-end">
+                                        End advance (inclusive)
+                                    </label>
+                                    <input type="text" inputmode="numeric" id="finder-end" value="20000">
+                                </div>
+                                <div class="form-group">
+                                    <div class="label-row">
+                                        <label for="finder-offset">
+                                            Display offset
+                                        </label>
+                                        <button type="button" class="info-button" aria-label="About the display offset" aria-expanded="false" aria-controls="finder-offset-help">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                <circle cx="12" cy="12" r="9" />
+                                                <path d="M12 11v6" />
+                                                <circle class="info-dot" cx="12" cy="7.5" r="1" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <input type="text" inputmode="text" id="finder-offset" value="0" aria-describedby="finder-offset-help">
+                                </div>
+                                <div class="form-group"><label for="finder-nature">
+                                        Nature
+                                    </label>
+                                    <select id="finder-nature">
+                                        <option value="-1">Any</option>
+                                        <option value="0">Hardy</option>
+                                        <option value="1">Lonely</option>
+                                        <option value="2">Brave</option>
+                                        <option value="3">Adamant</option>
+                                        <option value="4">Naughty</option>
+                                        <option value="5">Bold</option>
+                                        <option value="6">Docile</option>
+                                        <option value="7">Relaxed</option>
+                                        <option value="8">Impish</option>
+                                        <option value="9">Lax</option>
+                                        <option value="10">Timid</option>
+                                        <option value="11">Hasty</option>
+                                        <option value="12">Serious</option>
+                                        <option value="13">Jolly</option>
+                                        <option value="14">Naive</option>
+                                        <option value="15">Modest</option>
+                                        <option value="16">Mild</option>
+                                        <option value="17">Quiet</option>
+                                        <option value="18">Bashful</option>
+                                        <option value="19">Rash</option>
+                                        <option value="20">Calm</option>
+                                        <option value="21">Gentle</option>
+                                        <option value="22">Sassy</option>
+                                        <option value="23">Careful</option>
+                                        <option value="24">Quirky</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="finder-shiny">
+                                        Shininess
+                                    </label>
+                                    <select id="finder-shiny">
+                                        <option value="any">Any Mew (shiny or not)</option>
+                                        <option value="non-shiny">Non-shiny only</option>
+                                        <option value="shiny">Any shiny</option>
+                                        <option value="xor-zero">Square shiny only</option>
+                                        <option value="xor-one-seven">Star shiny only</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <p id="finder-offset-help" class="help-box" hidden>
+                                Advance = actual advance - display offset.
+                            </p>
+                            <p class="help-text finder-note">
+                                Shininess: "square" and "star" shinies look the same in Emerald and can only be seen starting in Gen 8. Zero results? Try increasing 'End advance' to 30000+.
+                            </p>
+                        </section>
+                        <section class="finder-panel" aria-labelledby="finder-filters-title">
+                            <div class="finder-panel-heading">
+                                <div class="finder-panel-title">
+                                    <h2 id="finder-filters-title">IV ranges</h2>
+                                    <span class="finder-range-note">
+                                        0-31 per stat
+                                    </span>
+                                </div>
+                                <button type="button" class="btn-secondary finder-reset" aria-label="Reset IV and Hidden Power filters" title="Reset IV ranges and Hidden Power to defaults">
+                                    <svg viewBox="0 -960 960 960" aria-hidden="true" focusable="false">
+                                        <path d="M520-330v-60h160v60H520Zm60 210v-50h-60v-60h60v-50h60v160h-60Zm100-50v-60h160v60H680Zm40-110v-160h60v50h60v60h-60v50h-60Zm111-280h-83q-26-88-99-144t-169-56q-117 0-198.5 81.5T200-480q0 72 32.5 132t87.5 98v-110h80v240H160v-80h94q-62-50-98-122.5T120-480q0-75 28.5-140.5t77-114q48.5-48.5 114-77T480-840q129 0 226.5 79.5T831-560Z" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="iv-grid">
+                                <fieldset class="iv-range">
+                                    <legend>HP</legend>
+                                    <div class="iv-range-inputs">
+                                        <div>
+                                            <label for="finder-hp-min">
+                                                Min
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-hp-min" value="0" aria-label="HP minimum IV">
+                                        </div>
+                                        <div>
+                                            <label for="finder-hp-max">
+                                                Max
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-hp-max" value="31" aria-label="HP maximum IV">
+                                        </div>
+                                    </div>
+                                </fieldset>
+                                <fieldset class="iv-range">
+                                    <legend>Attack</legend>
+                                    <div class="iv-range-inputs">
+                                        <div>
+                                            <label for="finder-atk-min">
+                                                Min
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-atk-min" value="0" aria-label="Attack minimum IV">
+                                        </div>
+                                        <div>
+                                            <label for="finder-atk-max">
+                                                Max
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-atk-max" value="31" aria-label="Attack maximum IV">
+                                        </div>
+                                    </div>
+                                </fieldset>
+                                <fieldset class="iv-range">
+                                    <legend>Defense</legend>
+                                    <div class="iv-range-inputs">
+                                        <div>
+                                            <label for="finder-def-min">
+                                                Min
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-def-min" value="0" aria-label="Defense minimum IV">
+                                        </div>
+                                        <div>
+                                            <label for="finder-def-max">
+                                                Max
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-def-max" value="31" aria-label="Defense maximum IV">
+                                        </div>
+                                    </div>
+                                </fieldset>
+                                <fieldset class="iv-range">
+                                    <legend>Sp. Attack</legend>
+                                    <div class="iv-range-inputs">
+                                        <div>
+                                            <label for="finder-spa-min">
+                                                Min
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-spa-min" value="0" aria-label="Sp. Attack minimum IV">
+                                        </div>
+                                        <div>
+                                            <label for="finder-spa-max">
+                                                Max
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-spa-max" value="31" aria-label="Sp. Attack maximum IV">
+                                        </div>
+                                    </div>
+                                </fieldset>
+                                <fieldset class="iv-range">
+                                    <legend>Sp. Defense</legend>
+                                    <div class="iv-range-inputs">
+                                        <div>
+                                            <label for="finder-spd-min">
+                                                Min
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-spd-min" value="0" aria-label="Sp. Defense minimum IV">
+                                        </div>
+                                        <div>
+                                            <label for="finder-spd-max">
+                                                Max
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-spd-max" value="31" aria-label="Sp. Defense maximum IV">
+                                        </div>
+                                    </div>
+                                </fieldset>
+                                <fieldset class="iv-range">
+                                    <legend>Speed</legend>
+                                    <div class="iv-range-inputs">
+                                        <div>
+                                            <label for="finder-spe-min">
+                                                Min
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-spe-min" value="0" aria-label="Speed minimum IV">
+                                        </div>
+                                        <div>
+                                            <label for="finder-spe-max">
+                                                Max
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="finder-spe-max" value="31" aria-label="Speed maximum IV">
+                                        </div>
+                                    </div>
+                                </fieldset>
+                            </div>
+                            <section class="finder-hidden-power" aria-labelledby="finder-hidden-power-title">
+                                <h3 id="finder-hidden-power-title">Hidden Power</h3>
+                                <div class="hidden-power-grid">
+                                    <div class="form-group">
+                                        <label for="finder-hp-type">
+                                            Type
+                                        </label>
+                                        <select id="finder-hp-type">
+                                            <option value="-1">Any</option>
+                                            <option value="0">Fighting</option>
+                                            <option value="1">Flying</option>
+                                            <option value="2">Poison</option>
+                                            <option value="3">Ground</option>
+                                            <option value="4">Rock</option>
+                                            <option value="5">Bug</option>
+                                            <option value="6">Ghost</option>
+                                            <option value="7">Steel</option>
+                                            <option value="8">Fire</option>
+                                            <option value="9">Water</option>
+                                            <option value="10">Grass</option>
+                                            <option value="11">Electric</option>
+                                            <option value="12">Psychic</option>
+                                            <option value="13">Ice</option>
+                                            <option value="14">Dragon</option>
+                                            <option value="15">Dark</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="finder-hp-power">
+                                            Min. power (30-70)
+                                        </label>
+                                        <input type="text" inputmode="numeric" id="finder-hp-power" value="30">
+                                    </div>
+                                </div>
+                            </section>
+                        </section>
+                    </div>
+                </fieldset>
+                <div class="finder-actionbar">
+                    <p class="help-text finder-limits">
+                        Up to 1,000,000 advances & 5,000 matches
+                    </p>
+                    <div class="button-group finder-actions">
+                        <button type="submit" id="finder-search" class="btn-primary">Find Mew</button>
+                        <button type="button" id="finder-cancel" class="btn-secondary" disabled>Cancel search</button>
+                    </div>
+                </div>
+            </form>
+            <p id="finder-status" role="status" aria-live="polite" aria-atomic="true">
+                Enter both trainer IDs to get started.
+            </p>
+            <section id="finder-results" aria-label="Mew search results" hidden>
+                <p id="finder-result-summary" class="help-text">
+                </p>
+                <p id="finder-result-offset-help" class="help-box" hidden>
+                </p>
+                <div class="table-scroll" role="region" aria-label="Scrollable Mew results" tabindex="0">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">
+                                    <span class="advance-heading">
+                                        Advance
+                                        <button type="button" id="finder-offset-indicator" class="info-button" aria-label="About the applied display offset" aria-expanded="false" aria-controls="finder-result-offset-help" hidden>
+                                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                <path d="M9 2h6M12 2v3M18 6l2-2" />
+                                                <circle cx="12" cy="14" r="8" />
+                                                <path d="M12 9v5l3 2" />
+                                            </svg>
+                                        </button>
+                                    </span>
+                                </th>
+                                <th scope="col">PID</th>
+                                <th scope="col">Nature</th>
+                                <th scope="col">HP</th>
+                                <th scope="col">Atk</th>
+                                <th scope="col">Def</th>
+                                <th scope="col">SpA</th>
+                                <th scope="col">SpD</th>
+                                <th scope="col">Spe</th>
+                                <th scope="col">Hidden Power</th>
+                                <th scope="col">Shiny</th>
+                            </tr>
+                        </thead>
+                        <tbody id="finder-result-rows"></tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <button type="button" id="finder-previous" class="btn-secondary">Previous</button>
+                    <span id="finder-page" role="status" aria-live="polite"></span>
+                    <button type="button" id="finder-next" class="btn-secondary">Next</button>
+                </div>
+            </section>
+            <template id="finder-result-row">
+                <tr>
+                    <td></td>
+                    <td class="pid"></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </template>
+        </section>
+        <footer>
+            Issues? <a href="https://github.com/regularwave/catch-mew" target="_blank" rel="noopener noreferrer">Report them on GitHub.</a>
+        </footer>
+        <noscript>
+            <p class="error">
+                Enable JavaScript to create saves and use the finder.
+            </p>
+        </noscript>
+    </main>
 </body>
 
 </html>

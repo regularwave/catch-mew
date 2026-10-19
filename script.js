@@ -198,19 +198,23 @@ function validateTemplateSlot(dataView, slot) {
         return quantity;
     };
 
-    if (!flag(0x864) || !flag(0x8D6)) { // GAME_CLEAR, ENABLE_SHIP_FARAWAY_ISLAND
+    // GAME_CLEAR, ENABLE_SHIP_FARAWAY_ISLAND
+    if (!flag(0x864) || !flag(0x8D6)) {
         throw new Error("Faraway Island ferry access is not enabled.");
     }
-    if (flag(0x1C7) || flag(0x1CA)) { // DEFEATED_MEW, CAUGHT_MEW
+    // DEFEATED_MEW, CAUGHT_MEW
+    if (flag(0x1C7) || flag(0x1CA)) {
         throw new Error("The Mew encounter has already been completed.");
     }
-    if (!flag(0x13C) || flag(0x1B0)) { // RECEIVED_OLD_SEA_MAP, SHOWN_OLD_SEA_MAP
+    // RECEIVED_OLD_SEA_MAP, SHOWN_OLD_SEA_MAP
+    if (!flag(0x13C) || flag(0x1B0)) {
         throw new Error("The Old Sea Map event is not in its expected initial state.");
     }
-    if (itemQuantity(0x5D8, 30, 0x178) !== 1) { // Key Item: Old Sea Map
+    // Key Item: Old Sea Map
+    if (itemQuantity(0x5D8, 30, 0x178) !== 1) {
         throw new Error("The expected Old Sea Map is missing.");
     }
-    // Starting map: group 13, map 6 (Lilycove Pokemon Center 1F), x=7, y=4.
+    // Starting map: group 13, map 6 (ミナモシティ/Lilycove Pokemon Center 1F), x=7, y=4.
     if (byte(4) !== 13 || byte(5) !== 6 || word(0) !== 7 || word(2) !== 4) {
         throw new Error("The prepared starting location has changed.");
     }
@@ -237,7 +241,7 @@ function prepareTemplateSave(templateBuffer) {
 function parseTrainerID(rawValue, label) {
     if (rawValue === '') return null;
     if (/[^0-9]/.test(rawValue)) {
-        throw new Error(`${label} must contain decimal digits only (0–65535) without signs, spaces, decimals, or scientific notation.`);
+        throw new Error(`${label} must contain decimal digits only (0 - 65535) without signs, spaces, decimals, or scientific notation.`);
     }
     const value = Number(rawValue);
     if (!Number.isInteger(value) || value > 65535) {
@@ -246,6 +250,7 @@ function parseTrainerID(rawValue, label) {
     return value;
 }
 
+// treat TID and SID as a pair: accept both if supplied, generate both if both are blank, show error if the fields are partially filled
 function resolveTrainerIDs(rawTID, rawSID) {
     const tid = parseTrainerID(rawTID, 'TID');
     const sid = parseTrainerID(rawSID, 'SID');
@@ -303,8 +308,7 @@ function validateTrainerName(rawName) {
 }
 
 function decodeTrainerName(dataView, offset) {
-    // preliminary support for pulling trainer data from non-Japanese saves
-    // only decode unambiguous Latin letters/digits/spaces: interpreting international accented letters as Japanese bytes yields kana
+    // get trainer name; for non-Japanese saves, only decode unambiguous Latin letters/digits/spaces: interpreting international accented letters as Japanese bytes yields kana
     const japanese = dataView.getUint16(offset + 6, true) === 0;
     let name = "";
     for (let i = 0; i < TRAINER_NAME_FIELD_SIZE; i++) {
@@ -341,6 +345,7 @@ function encodeTrainerName(rawName) {
     return bytes;
 }
 
+// check if IME is in a composition state and block export mid-composition
 let trainerNameIsComposing = false;
 
 function updateTrainerNamePreview() {
@@ -348,7 +353,7 @@ function updateTrainerNamePreview() {
     const preview = document.getElementById('trainer-name-preview');
     try {
         const name = validateTrainerName(input.value);
-        preview.textContent = `Name in save: 「${name}」 (${Array.from(name).length}/${MAX_TRAINER_NAME_LENGTH})`;
+        preview.textContent = `Name preview: 「${name}」 (${Array.from(name).length}/${MAX_TRAINER_NAME_LENGTH})`;
         preview.className = 'help-text';
         input.setAttribute('aria-invalid', 'false');
     } catch (error) {
@@ -363,19 +368,6 @@ function setupTrainerNameInput() {
     const input = document.getElementById('trainer-name');
     // validate encoded characters ourselves after IME composition
     input.removeAttribute('maxlength');
-    const preview = document.createElement('div');
-    preview.id = 'trainer-name-preview';
-    preview.setAttribute('role', 'status');
-    preview.setAttribute('aria-live', 'polite');
-    preview.setAttribute('aria-atomic', 'true');
-    preview.style.whiteSpace = 'pre-wrap';
-    preview.style.marginBottom = '20px';
-    // put below the whole row to keep the name and gender inputs aligned
-    const row = input.closest('.form-row');
-    (row || input).insertAdjacentElement('afterend', preview);
-    const descriptions = new Set((input.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
-    descriptions.add(preview.id);
-    input.setAttribute('aria-describedby', [...descriptions].join(' '));
     input.addEventListener('input', event => {
         if (!trainerNameIsComposing && !event.isComposing) updateTrainerNamePreview();
     });
@@ -498,6 +490,7 @@ document.getElementById('user-save-file').addEventListener('change', function (e
     }
 });
 
+// validate user input, edit the template, recalc checksums, then prep and trigger the download
 async function generateSave() {
     try {
         if (trainerNameIsComposing) {
@@ -505,7 +498,9 @@ async function generateSave() {
         }
         const rawName = document.getElementById('trainer-name').value;
         updateTrainerNamePreview();
-        const nameBytes = encodeTrainerName(rawName); // validate before IDs or template bytes change.
+
+        // validate before IDs or template bytes change
+        const nameBytes = encodeTrainerName(rawName);
 
         const ids = resolveTrainerIDs(
             document.getElementById('tid').value,
@@ -531,7 +526,7 @@ async function generateSave() {
                 dataView.setUint8(sectorOffset + i, nameBytes[i]);
             }
 
-            // recalculate checksum
+            // recalculate section 0 checksum
             const checksum = calculateSectionChecksum(dataView, sectorOffset, EMERALD_SECTION_LENGTHS[0]);
             dataView.setUint16(sectorOffset + SAVE_FOOTER.checksum, checksum, true);
         }
@@ -553,3 +548,394 @@ async function generateSave() {
         setStatus(error.message, true);
     }
 }
+
+(function (root) {
+    'use strict';
+    const NATURES = ['Hardy', 'Lonely', 'Brave', 'Adamant', 'Naughty', 'Bold', 'Docile', 'Relaxed', 'Impish', 'Lax', 'Timid', 'Hasty', 'Serious', 'Jolly', 'Naive', 'Modest', 'Mild', 'Quiet', 'Bashful', 'Rash', 'Calm', 'Gentle', 'Sassy', 'Careful', 'Quirky'];
+    const HP_TYPES = ['Fighting', 'Flying', 'Poison', 'Ground', 'Rock', 'Bug', 'Ghost', 'Steel', 'Fire', 'Water', 'Grass', 'Electric', 'Psychic', 'Ice', 'Dragon', 'Dark'];
+    const STATS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+    const MAX_ADVANCE = 0xFFFFFFFF;
+    const MAX_SEARCH = 1000000;
+    const MAX_RESULTS = 5000;
+    const PAGE_SIZE = 100;
+
+    // RNG: state = state * 0x41C64E6D + 0x6073, modulo 2^32; use imul so the low bits remain exact even for large seeds
+    function next(seed) {
+        return (Math.imul(seed, 0x41C64E6D) + 0x6073) >>> 0;
+    }
+
+    // skip ahead in RNG advances by squaring the transform
+    function jump(seed, advances) {
+        let multiplier = 0x41C64E6D, addend = 0x6073;
+        while (advances > 0) {
+            if (advances % 2) seed = (Math.imul(seed, multiplier) + addend) >>> 0;
+            addend = Math.imul(addend, multiplier + 1) >>> 0;
+            multiplier = Math.imul(multiplier, multiplier) >>> 0;
+            advances = Math.floor(advances / 2);
+        }
+        return seed >>> 0;
+    }
+
+    function integertest(value, label, min, max) {
+        const text = String(value).trim();
+        if (!/^-?\d+$/.test(text)) throw new Error(`${label} must be an integer.`);
+        const number = Number(text);
+        if (!Number.isSafeInteger(number) || number < min || number > max) {
+            throw new Error(`${label} must be between ${min} and ${max}.`);
+        }
+        return number;
+    }
+
+    function validateSearch(raw) {
+        const seedText = String(raw.seed).trim();
+        if (!/^(?:0x)?[0-9a-f]{1,8}$/i.test(seedText)) {
+            throw new Error('Seed must contain 1-8 hexadecimal digits, optionally prefixed with 0x.');
+        }
+        const config = {
+            seed: Number.parseInt(seedText.replace(/^0x/i, ''), 16),
+            tid: integertest(raw.tid, 'TID', 0, 65535),
+            sid: integertest(raw.sid, 'SID', 0, 65535),
+            start: integertest(raw.start, 'Start advance', 0, MAX_ADVANCE),
+            end: integertest(raw.end, 'End advance', 0, MAX_ADVANCE),
+            offset: integertest(raw.offset, 'Display offset', -MAX_ADVANCE, MAX_ADVANCE),
+            nature: integertest(raw.nature, 'Nature', -1, 24),
+            hpType: integertest(raw.hpType, 'Hidden Power type', -1, 15),
+            hpPower: integertest(raw.hpPower, 'Minimum Hidden Power power', 30, 70),
+            shiny: raw.shiny,
+            ivs: {}
+        };
+        if (config.end < config.start) throw new Error('End advance must be at least the start advance.');
+        if (config.end - config.start + 1 > MAX_SEARCH) {
+            throw new Error(`Search at most ${MAX_SEARCH.toLocaleString('en-US')} advances at a time.`);
+        }
+        if (!['any', 'shiny', 'non-shiny', 'xor-zero', 'xor-one-seven'].includes(config.shiny)) {
+            throw new Error('Choose a valid shiny filter.');
+        }
+        for (const stat of STATS) {
+            const min = integertest(raw.ivs?.[stat]?.min, `${stat.toUpperCase()} minimum IV`, 0, 31);
+            const max = integertest(raw.ivs?.[stat]?.max, `${stat.toUpperCase()} maximum IV`, 0, 31);
+            if (min > max) throw new Error(`${stat.toUpperCase()} minimum IV cannot exceed its maximum.`);
+            config.ivs[stat] = { min, max };
+        }
+        return config;
+    }
+
+    function fromWords(words, advance, config) {
+        const [low, high, firstIVs, secondIVs] = words;
+        const pid = ((high << 16) | low) >>> 0;
+        const nature = pid % 25;
+        const ivs = {
+            hp: firstIVs & 31, atk: (firstIVs >>> 5) & 31, def: (firstIVs >>> 10) & 31,
+            spa: (secondIVs >>> 5) & 31, spd: (secondIVs >>> 10) & 31, spe: secondIVs & 31
+        };
+        const stats = { hp: Math.floor((200 + ivs.hp) * 30 / 100) + 40 };
+        const natureOrder = ['atk', 'def', 'spe', 'spa', 'spd'];
+        natureOrder.forEach((stat, index) => {
+            const increased = Math.floor(nature / 5) === index;
+            const decreased = nature % 5 === index;
+            const modifier = increased === decreased ? 10 : increased ? 11 : 9;
+            stats[stat] = Math.floor((Math.floor((200 + ivs[stat]) * 30 / 100) + 5) * modifier / 10);
+        });
+        const hpOrder = ['hp', 'atk', 'def', 'spe', 'spa', 'spd'];
+        let typeBits = 0, powerBits = 0;
+        hpOrder.forEach((stat, bit) => {
+            typeBits |= (ivs[stat] & 1) << bit;
+            powerBits |= ((ivs[stat] >>> 1) & 1) << bit;
+        });
+        const shinyXor = config.tid ^ config.sid ^ low ^ high;
+        return {
+            advance, displayAdvance: advance - config.offset, pid, nature, ivs, stats,
+            hpType: Math.floor(typeBits * 15 / 63), hpPower: Math.floor(powerBits * 40 / 63) + 30,
+            shinyXor, shiny: shinyXor < 8, ability: 'Synchronize'
+        };
+    }
+
+    function matches(row, config) {
+        if (config.nature !== -1 && row.nature !== config.nature) return false;
+        if (config.hpType !== -1 && row.hpType !== config.hpType) return false;
+        if (row.hpPower < config.hpPower) return false;
+        if (config.shiny === 'shiny' && !row.shiny) return false;
+        if (config.shiny === 'non-shiny' && row.shiny) return false;
+        if (config.shiny === 'xor-zero' && row.shinyXor !== 0) return false;
+        if (config.shiny === 'xor-one-seven' && (row.shinyXor < 1 || row.shinyXor > 7)) return false;
+        return STATS.every(stat => row.ivs[stat] >= config.ivs[stat].min && row.ivs[stat] <= config.ivs[stat].max);
+    }
+
+    function createSearch(config) {
+        let seed = jump(config.seed, config.start);
+        const words = [];
+        for (let i = 0; i < 4; i++) {
+            seed = next(seed);
+            words.push(seed >>> 16);
+        }
+        let advance = config.start, scanned = 0, done = false, truncated = false;
+        const rows = [];
+        return {
+            rows,
+            step(count = 2000) {
+                for (let i = 0; i < count && !done; i++) {
+                    const row = fromWords(words, advance, config);
+                    if (matches(row, config)) rows.push(row);
+                    scanned++;
+                    advance++;
+                    truncated = rows.length >= MAX_RESULTS && advance <= config.end;
+                    done = advance > config.end || truncated;
+                    if (!done) {
+                        seed = next(seed);
+                        words.shift();
+                        words.push(seed >>> 16);
+                    }
+                }
+                return { done, truncated, scanned, lastAdvance: advance - 1 };
+            }
+        };
+    }
+
+    const api = { NATURES, HP_TYPES, STATS, MAX_ADVANCE, MAX_SEARCH, MAX_RESULTS, PAGE_SIZE, next, jump, decimal: integertest, validateSearch, fromWords, matches, createSearch };
+    if (typeof module !== 'undefined' && module.exports) module.exports = api;
+    else root.MewFinder = api;
+})(globalThis);
+
+(function () {
+    'use strict';
+
+    const byId = id => document.getElementById(id);
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+
+    function activateTab(selected) {
+        for (const tab of tabs) {
+            const active = tab === selected;
+            tab.setAttribute('aria-selected', String(active));
+            tab.tabIndex = active ? 0 : -1;
+            byId(tab.getAttribute('aria-controls')).hidden = !active;
+        }
+    }
+
+    tabs.forEach((tab, index) => {
+        tab.addEventListener('click', () => activateTab(tab));
+        tab.addEventListener('keydown', event => {
+            let next;
+            if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+            if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+            if (event.key === 'Home') next = 0;
+            if (event.key === 'End') next = tabs.length - 1;
+            if (next === undefined) return;
+            event.preventDefault();
+            activateTab(tabs[next]);
+            tabs[next].focus();
+        });
+    });
+
+    const helpButtons = [...document.querySelectorAll('.info-button')];
+
+    function closeHelp(button) {
+        button.setAttribute('aria-expanded', 'false');
+        byId(button.getAttribute('aria-controls')).hidden = true;
+    }
+
+    helpButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const open = button.getAttribute('aria-expanded') !== 'true';
+            helpButtons.forEach(closeHelp);
+            button.setAttribute('aria-expanded', String(open));
+            byId(button.getAttribute('aria-controls')).hidden = !open;
+        });
+    });
+
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape') return;
+        const open = helpButtons.find(button => button.getAttribute('aria-expanded') === 'true');
+        if (open) {
+            closeHelp(open);
+            if (!open.closest('[role="tabpanel"]').hidden) open.focus();
+        }
+    });
+
+    document.addEventListener('click', event => {
+        if (!event.target.closest('.info-button, .help-box')) helpButtons.forEach(closeHelp);
+    });
+
+    byId('randomize-ids').addEventListener('click', randomizeIDs);
+    byId('load-save').addEventListener('click', () => byId('user-save-file').click());
+
+    byId('save-form').addEventListener('submit', event => {
+        event.preventDefault();
+        generateSave();
+    });
+
+    const finder = globalThis.MewFinder;
+    let current = null, results = [], page = 0;
+
+    function status(message, error = false) {
+        byId('finder-status').textContent = message;
+        byId('finder-status').className = error ? 'error' : '';
+    }
+
+    function rawSearch() {
+        const value = id => byId(`finder-${id}`).value;
+        return {
+            tid: value('tid'),
+            sid: value('sid'),
+            seed: value('seed'),
+            start: value('start'),
+            end: value('end'),
+            offset: value('offset'),
+            nature: value('nature'),
+            hpType: value('hp-type'),
+            hpPower: value('hp-power'),
+            shiny: value('shiny'),
+            ivs: Object.fromEntries(finder.STATS.map(stat => [stat, {
+                min: value(`${stat}-min`), max: value(`${stat}-max`)
+            }]))
+        };
+    }
+
+    function markChanged() {
+        if (results.length) status('Inputs changed. Run a new search to update the results below.');
+    }
+
+    byId('finder-fields').addEventListener('input', markChanged);
+    byId('finder-fields').addEventListener('change', markChanged);
+
+    document.querySelectorAll('.finder-reset').forEach(button => {
+        button.addEventListener('click', () => {
+            if (current) return; // Keep the search configuration fixed while it runs.
+            const panel = button.closest('.finder-panel');
+            // Read defaults from the HTML, and reset only this panel's controls.
+            // The IV panel includes Hidden Power; trainer IDs sit outside both panels.
+            panel.querySelectorAll('input').forEach(input => { input.value = input.defaultValue; });
+            panel.querySelectorAll('select').forEach(select => {
+                const defaultIndex = [...select.options].findIndex(option => option.defaultSelected);
+                select.selectedIndex = defaultIndex === -1 ? 0 : defaultIndex;
+            });
+            const name = panel.querySelector('h2').textContent;
+            status(`${name} reset to defaults.` + (results.length
+                ? ' Run a new search to update the results below.'
+                : ' Run a search to use these settings.'));
+        });
+    });
+
+    byId('finder-copy-ids').addEventListener('click', () => {
+        try {
+            const tid = finder.decimal(byId('tid').value, 'Create save TID', 0, 65535);
+            const sid = finder.decimal(byId('sid').value, 'Create save SID', 0, 65535);
+            byId('finder-tid').value = tid;
+            byId('finder-sid').value = sid;
+            status('Copied both trainer IDs. Run a search to use this pair.');
+        } catch (error) {
+            status(`${error.message} Enter or randomize both IDs in Create save first.`, true);
+        }
+    });
+
+    function renderPage() {
+        const body = byId('finder-result-rows');
+        const fragment = document.createDocumentFragment();
+        const first = page * finder.PAGE_SIZE;
+        for (const result of results.slice(first, first + finder.PAGE_SIZE)) {
+            const row = byId('finder-result-row').content.firstElementChild.cloneNode(true);
+            const values = [result.displayAdvance,
+            result.pid.toString(16).toUpperCase().padStart(8, '0'), finder.NATURES[result.nature],
+            ...finder.STATS.map(stat => `${result.ivs[stat]} (${result.stats[stat]})`),
+            `${finder.HP_TYPES[result.hpType]} ${result.hpPower}`,
+            result.shiny ? (result.shinyXor === 0 ? 'Square' : 'Star') : 'No'];
+            [...row.cells].forEach((cell, index) => { cell.textContent = values[index]; });
+            if (result.shiny) row.className = 'shiny-row';
+            fragment.appendChild(row);
+        }
+        body.replaceChildren(fragment);
+        const pages = Math.max(1, Math.ceil(results.length / finder.PAGE_SIZE));
+        byId('finder-page').textContent = `Page ${page + 1} of ${pages} - ${results.length.toLocaleString('en-US')} matches`;
+        byId('finder-previous').disabled = page === 0;
+        byId('finder-next').disabled = page + 1 >= pages;
+        document.querySelector('.table-scroll').scrollTop = 0;
+    }
+
+    byId('finder-previous').addEventListener('click', () => {
+        if (page > 0) { page--; renderPage(); }
+    });
+
+    byId('finder-next').addEventListener('click', () => {
+        if ((page + 1) * finder.PAGE_SIZE < results.length) { page++; renderPage(); }
+    });
+
+    function setRunning(running) {
+        byId('finder-fields').disabled = running;
+        byId('finder-search').disabled = running;
+        byId('finder-cancel').disabled = !running;
+        byId('finder-results').setAttribute('aria-busy', String(running));
+    }
+
+    function finish(job, cancelled = false) {
+        if (job !== current) return;
+        current = null;
+        const restoreFocus = document.activeElement === byId('finder-cancel');
+        setRunning(false);
+        if (restoreFocus) byId('finder-search').focus();
+        results = job.search.rows;
+        page = 0;
+        const { scanned, truncated, lastAdvance } = job.progress;
+        const resultCount = `${results.length.toLocaleString('en-US')} matches in ${scanned.toLocaleString('en-US')} advances searched`;
+        let message = cancelled ? `Search cancelled: ${resultCount}.` : `Search complete: ${resultCount}.`;
+        if (truncated) message = `Stopped at the 5,000-match limit after advance ${lastAdvance}. Narrow the filters or continue with start advance ${lastAdvance + 1}.`;
+        if (cancelled && scanned) message += ` Last searched advance: ${lastAdvance}.`;
+        status(message);
+        const config = job.config;
+        const offsetIndicator = byId('finder-offset-indicator');
+        closeHelp(offsetIndicator);
+        offsetIndicator.hidden = config.offset === 0;
+        offsetIndicator.setAttribute('aria-label', `About the applied display offset: ${config.offset}`);
+        offsetIndicator.title = `Display offset: ${config.offset}. Advance = actual advance - (${config.offset}).`;
+        byId('finder-result-offset-help').textContent =
+            `Display offset: ${config.offset}. Advance = actual advance - (${config.offset}). ` +
+            'Actual advance counts RNG calls before the PID. The offset is visual only.';
+        byId('finder-result-summary').textContent =
+            `TID: ${config.tid} - SID: ${config.sid} - Seed: ${config.seed.toString(16).toUpperCase().padStart(8, '0')} - ` +
+            `Advance range: ${config.start}-${config.end} - Display offset: ${config.offset}. ${message}`;
+        byId('finder-results').hidden = results.length === 0;
+        renderPage();
+    }
+
+    function tick(job) {
+        if (job !== current) return;
+        try {
+            job.progress = job.search.step();
+            if (job.progress.done) { finish(job); return; }
+            if (Date.now() - job.announced >= 500) {
+                status(`Searching - ${job.progress.scanned.toLocaleString('en-US')} advances checked...`);
+                job.announced = Date.now();
+            }
+            job.timer = setTimeout(() => tick(job), 0);
+        } catch (error) {
+            current = null;
+            setRunning(false);
+            status(`Search failed: ${error.message}`, true);
+        }
+    }
+
+    byId('finder-cancel').addEventListener('click', () => {
+        if (!current) return;
+        clearTimeout(current.timer);
+        finish(current, true);
+        byId('finder-search').focus();
+    });
+
+    byId('finder-form').addEventListener('submit', event => {
+        event.preventDefault();
+        if (current) return;
+        let config;
+        try { config = finder.validateSearch(rawSearch()); }
+        catch (error) { status(error.message, true); return; }
+        results = [];
+        byId('finder-result-rows').replaceChildren();
+        byId('finder-results').hidden = true;
+        const job = {
+            config, search: finder.createSearch(config), announced: Date.now(),
+            progress: { scanned: 0, lastAdvance: config.start - 1, truncated: false }
+        };
+        current = job;
+        setRunning(true);
+        status('Searching...');
+        byId('finder-cancel').focus();
+        job.timer = setTimeout(() => tick(job), 0);
+    });
+})();
