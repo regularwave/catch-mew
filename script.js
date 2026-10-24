@@ -620,6 +620,51 @@ async function generateSave() {
         return config;
     }
 
+    // stat entry assumes no EVs
+    function mewStats(ivs, nature, level = 30) {
+        const stats = { hp: Math.floor((200 + ivs.hp) * level / 100) + level + 10 };
+        const natureOrder = ['atk', 'def', 'spe', 'spa', 'spd'];
+        natureOrder.forEach((stat, index) => {
+            const increased = Math.floor(nature / 5) === index;
+            const decreased = nature % 5 === index;
+            const modifier = increased === decreased ? 10 : increased ? 11 : 9;
+            stats[stat] = Math.floor((Math.floor((200 + ivs[stat]) * level / 100) + 5) * modifier / 10);
+        });
+        return stats;
+    }
+
+    function calibrationRange(pressedAdvance) {
+        const advance = integertest(pressedAdvance, 'Target advance', 0, MAX_ADVANCE);
+        return { start: Math.max(0, advance - 1000), end: Math.min(MAX_ADVANCE, advance + 1000) };
+    }
+
+    function validateCalibration(raw) {
+        const pressedAdvance = integertest(raw.pressedAdvance, 'Target advance', 0, MAX_ADVANCE);
+        const config = validateSearch({
+            seed: raw.seed, start: raw.start, end: raw.end, nature: -1,
+            tid: 0, sid: 0, offset: 0, shiny: 'any', hpType: -1, hpPower: 30,
+            ivs: Object.fromEntries(STATS.map(stat => [stat, { min: 0, max: 31 }]))
+        });
+        config.pressedAdvance = pressedAdvance;
+        config.level = 30; // Faraway Island Mew's static encounter is always level 30.
+        config.observedStats = {};
+        for (const stat of STATS) {
+            const value = String(raw.stats?.[stat] ?? '').trim();
+            if (value !== '') config.observedStats[stat] = integertest(value, `${stat.toUpperCase()} stat`, 1, 999);
+        }
+        const observed = Object.entries(config.observedStats);
+        if (!observed.length) throw new Error('At least one stat from a caught Mew is required; all six give the best match.');
+
+        // at low levels multiple IVs produce the same stat: check every IV
+        const possible = NATURES.some((_, nature) => {
+            const values = Array.from({ length: 32 }, (_, iv) =>
+                mewStats(Object.fromEntries(STATS.map(stat => [stat, iv])), nature, config.level));
+            return observed.every(([stat, value]) => values.some(stats => stats[stat] === value));
+        });
+        if (!possible) throw new Error('Entered stats not possible for a freshly-caught Mew.');
+        return config;
+    }
+
     function fromWords(words, advance, config) {
         const [low, high, firstIVs, secondIVs] = words;
         const pid = ((high << 16) | low) >>> 0;
@@ -628,14 +673,7 @@ async function generateSave() {
             hp: firstIVs & 31, atk: (firstIVs >>> 5) & 31, def: (firstIVs >>> 10) & 31,
             spa: (secondIVs >>> 5) & 31, spd: (secondIVs >>> 10) & 31, spe: secondIVs & 31
         };
-        const stats = { hp: Math.floor((200 + ivs.hp) * 30 / 100) + 40 };
-        const natureOrder = ['atk', 'def', 'spe', 'spa', 'spd'];
-        natureOrder.forEach((stat, index) => {
-            const increased = Math.floor(nature / 5) === index;
-            const decreased = nature % 5 === index;
-            const modifier = increased === decreased ? 10 : increased ? 11 : 9;
-            stats[stat] = Math.floor((Math.floor((200 + ivs[stat]) * 30 / 100) + 5) * modifier / 10);
-        });
+        const stats = mewStats(ivs, nature, config.level ?? 30);
         const hpOrder = ['hp', 'atk', 'def', 'spe', 'spa', 'spd'];
         let typeBits = 0, powerBits = 0;
         hpOrder.forEach((stat, bit) => {
@@ -652,6 +690,7 @@ async function generateSave() {
 
     function matches(row, config) {
         if (config.nature !== -1 && row.nature !== config.nature) return false;
+        if (config.observedStats && !Object.entries(config.observedStats).every(([stat, value]) => row.stats[stat] === value)) return false;
         if (config.hpType !== -1 && row.hpType !== config.hpType) return false;
         if (row.hpPower < config.hpPower) return false;
         if (config.shiny === 'shiny' && !row.shiny) return false;
@@ -691,7 +730,7 @@ async function generateSave() {
         };
     }
 
-    const api = { NATURES, HP_TYPES, STATS, MAX_ADVANCE, MAX_SEARCH, MAX_RESULTS, PAGE_SIZE, next, jump, decimal: integertest, validateSearch, fromWords, matches, createSearch };
+    const api = { NATURES, HP_TYPES, STATS, MAX_ADVANCE, MAX_SEARCH, MAX_RESULTS, PAGE_SIZE, next, jump, decimal: integertest, validateSearch, calibrationRange, validateCalibration, mewStats, fromWords, matches, createSearch };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.MewFinder = api;
 })(globalThis);
@@ -765,6 +804,7 @@ async function generateSave() {
 
     const finder = globalThis.MewFinder;
     let current = null, results = [], page = 0;
+    let calibrationResults = [], calibrationConfig = null, calibrationPage = 0;
 
     function status(message, error = false) {
         byId('finder-status').textContent = message;
@@ -797,7 +837,7 @@ async function generateSave() {
     byId('finder-fields').addEventListener('input', markChanged);
     byId('finder-fields').addEventListener('change', markChanged);
 
-    document.querySelectorAll('.finder-reset').forEach(button => {
+    document.querySelectorAll('#finder-form .finder-reset').forEach(button => {
         button.addEventListener('click', () => {
             if (current) return; // Keep the search configuration fixed while it runs.
             const panel = button.closest('.finder-panel');
@@ -808,6 +848,7 @@ async function generateSave() {
                 const defaultIndex = [...select.options].findIndex(option => option.defaultSelected);
                 select.selectedIndex = defaultIndex === -1 ? 0 : defaultIndex;
             });
+            if (panel.contains(byId('finder-seed'))) invalidateCalibration();
             const name = panel.querySelector('h2').textContent;
             status(`${name} reset to defaults.` + (results.length
                 ? ' Run a new search to update the results below.'
@@ -861,12 +902,18 @@ async function generateSave() {
     function setRunning(running) {
         byId('finder-fields').disabled = running;
         byId('finder-search').disabled = running;
-        byId('finder-cancel').disabled = !running;
         byId('finder-results').setAttribute('aria-busy', String(running));
+        byId('calibration-fields').disabled = running;
+        byId('calibration-search').disabled = running;
+        byId('calibration-cancel').disabled = !running || !current?.calibration;
+        byId('finder-cancel').disabled = !running || !!current?.calibration;
+        byId('calibration-results').setAttribute('aria-busy', String(running));
+        byId('calibration-result-rows').querySelectorAll('button').forEach(button => { button.disabled = running; });
     }
 
     function finish(job, cancelled = false) {
         if (job !== current) return;
+        if (job.calibration) { finishCalibration(job, cancelled); return; }
         current = null;
         const restoreFocus = document.activeElement === byId('finder-cancel');
         setRunning(false);
@@ -901,19 +948,21 @@ async function generateSave() {
             job.progress = job.search.step();
             if (job.progress.done) { finish(job); return; }
             if (Date.now() - job.announced >= 500) {
-                status(`Searching - ${job.progress.scanned.toLocaleString('en-US')} advances checked...`);
+                const report = job.calibration ? calibrationStatus : status;
+                report(`Searching - ${job.progress.scanned.toLocaleString('en-US')} advances checked...`);
                 job.announced = Date.now();
             }
             job.timer = setTimeout(() => tick(job), 0);
         } catch (error) {
             current = null;
             setRunning(false);
-            status(`Search failed: ${error.message}`, true);
+            const report = job.calibration ? calibrationStatus : status;
+            report(`Search failed: ${error.message}`, true);
         }
     }
 
     byId('finder-cancel').addEventListener('click', () => {
-        if (!current) return;
+        if (!current || current.calibration) return;
         clearTimeout(current.timer);
         finish(current, true);
         byId('finder-search').focus();
@@ -936,6 +985,150 @@ async function generateSave() {
         setRunning(true);
         status('Searching...');
         byId('finder-cancel').focus();
+        job.timer = setTimeout(() => tick(job), 0);
+    });
+
+    function calibrationStatus(message, error = false) {
+        byId('calibration-status').textContent = message;
+        byId('calibration-status').className = error ? 'error' : '';
+    }
+
+    function invalidateCalibration() {
+        if (calibrationConfig) calibrationStatus('Inputs changed. Find the caught Mew again before using an offset.');
+        calibrationConfig = null;
+        calibrationResults = [];
+        byId('calibration-results').hidden = true;
+        byId('calibration-result-rows').replaceChildren();
+    }
+
+    byId('calibration-fields').addEventListener('input', invalidateCalibration);
+    byId('calibration-fields').addEventListener('change', invalidateCalibration);
+    byId('finder-seed').addEventListener('input', invalidateCalibration);
+    byId('finder-seed').addEventListener('change', invalidateCalibration);
+
+    function updateCalibrationRange() {
+        let range;
+        try {
+            range = finder.calibrationRange(byId('calibration-pressed').value);
+        } catch {
+            range = { start: '', end: '' };
+        }
+        byId('calibration-start').value = range.start;
+        byId('calibration-end').value = range.end;
+    }
+
+    byId('calibration-pressed').addEventListener('input', updateCalibrationRange);
+    byId('calibration-reset').addEventListener('click', () => {
+        if (current) return;
+        byId('calibration-form').reset();
+        updateCalibrationRange();
+        invalidateCalibration();
+        calibrationStatus('Caught-Mew inputs reset. Enter stats again from summary screen.');
+    });
+
+    function renderCalibrationPage() {
+        const fragment = document.createDocumentFragment();
+        const first = calibrationPage * finder.PAGE_SIZE;
+        for (const result of calibrationResults.slice(first, first + finder.PAGE_SIZE)) {
+            const row = document.createElement('tr');
+            const offset = result.advance - calibrationConfig.pressedAdvance;
+            const values = [result.advance, offset, finder.NATURES[result.nature],
+            ...finder.STATS.map(stat => result.stats[stat])];
+            for (const value of values) {
+                const cell = document.createElement('td');
+                cell.textContent = value;
+                row.appendChild(cell);
+            }
+            const cell = document.createElement('td');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn-secondary';
+            button.textContent = 'Use offset';
+            button.setAttribute('aria-label', `Use offset ${offset} from advance ${result.advance}`);
+            button.disabled = !!current;
+            button.addEventListener('click', () => {
+                if (current || !calibrationConfig) return;
+                byId('finder-offset').value = offset;
+                status(`Display offset set to ${offset}. Click Find Mew to update target advances.`);
+                calibrationStatus(`Applied ${result.advance} - ${calibrationConfig.pressedAdvance} = ${offset}. Click Find Mew, then repeat the same reset and button-press procedure.`);
+                byId('finder-offset').focus();
+            });
+            cell.appendChild(button);
+            row.appendChild(cell);
+            fragment.appendChild(row);
+        }
+        byId('calibration-result-rows').replaceChildren(fragment);
+        const pages = Math.max(1, Math.ceil(calibrationResults.length / finder.PAGE_SIZE));
+        byId('calibration-page').textContent = `Page ${calibrationPage + 1} of ${pages} - ${calibrationResults.length.toLocaleString('en-US')} candidates`;
+        byId('calibration-previous').disabled = calibrationPage === 0;
+        byId('calibration-next').disabled = calibrationPage + 1 >= pages;
+        byId('calibration-results').querySelector('.table-scroll').scrollTop = 0;
+    }
+
+    byId('calibration-previous').addEventListener('click', () => {
+        if (calibrationPage > 0) { calibrationPage--; renderCalibrationPage(); }
+    });
+    byId('calibration-next').addEventListener('click', () => {
+        if ((calibrationPage + 1) * finder.PAGE_SIZE < calibrationResults.length) { calibrationPage++; renderCalibrationPage(); }
+    });
+
+    function finishCalibration(job, cancelled) {
+        current = null;
+        const restoreFocus = document.activeElement === byId('calibration-cancel');
+        setRunning(false);
+        if (restoreFocus) byId('calibration-search').focus();
+        calibrationResults = job.search.rows;
+        calibrationConfig = job.config;
+        calibrationPage = 0;
+        const { scanned, truncated, lastAdvance } = job.progress;
+        let message = `${calibrationResults.length.toLocaleString('en-US')} candidates in ${scanned.toLocaleString('en-US')} advances searched.`;
+        if (cancelled || truncated) {
+            message += ' Search incomplete; these are only the candidates found so far.';
+            if (scanned) message += ` Last searched advance: ${lastAdvance}.`;
+            if (truncated) message += ' Reached the 5,000-match limit. Add stats, narrow the range, or continue after this advance.';
+        } else if (!calibrationResults.length) {
+            message += ' Check the entered stats or widen this search range. This lookup assumes a level 30 Mew with zero EVs.';
+        } else if (calibrationResults.length === 1) {
+            message += ' One candidate in this range. Use its offset, then verify it with another attempt.';
+        } else {
+            message += ' More than one advance fits. Add missing stats, narrow the range, or compare another attempt before choosing an offset.';
+        }
+        calibrationStatus((cancelled ? 'Search cancelled. ' : '') + message);
+        byId('calibration-result-summary').textContent =
+            `Seed: ${job.config.seed.toString(16).toUpperCase().padStart(8, '0')} - Search range: ${job.config.start}-${job.config.end} - ` +
+            `Target was: ${job.config.pressedAdvance}. ` +
+            (cancelled || truncated ? 'Partial results.' : '');
+        byId('calibration-results').hidden = calibrationResults.length === 0;
+        renderCalibrationPage();
+    }
+
+    byId('calibration-cancel').addEventListener('click', () => {
+        if (!current?.calibration) return;
+        clearTimeout(current.timer);
+        finish(current, true);
+    });
+
+    byId('calibration-form').addEventListener('submit', event => {
+        event.preventDefault();
+        if (current) return;
+        invalidateCalibration();
+        let config;
+        try {
+            const value = id => byId(`calibration-${id}`).value;
+            config = finder.validateCalibration({
+                seed: byId('finder-seed').value, start: value('start'), end: value('end'),
+                pressedAdvance: value('pressed'),
+                stats: Object.fromEntries(finder.STATS.map(stat => [stat, value(stat)]))
+            });
+        } catch (error) { calibrationStatus(error.message, true); return; }
+        const job = {
+            calibration: true, config, search: finder.createSearch(config), announced: Date.now(),
+            progress: { scanned: 0, lastAdvance: config.start - 1, truncated: false }
+        };
+        current = job;
+        setRunning(true);
+        calibrationStatus('Looking for the caught Mew...');
+        byId('calibration-cancel').focus();
         job.timer = setTimeout(() => tick(job), 0);
     });
 })();

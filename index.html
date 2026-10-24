@@ -457,6 +457,126 @@
                     <td></td>
                 </tr>
             </template>
+            <section class="finder-panel calibration-panel" aria-labelledby="calibration-title">
+                <form id="calibration-form" novalidate>
+                    <fieldset id="calibration-fields" aria-label="Caught Mew and offset settings">
+                        <div class="finder-panel-heading">
+                            <h2 id="calibration-title">Find offset from a caught Mew</h2>
+                            <button type="button" id="calibration-reset" class="btn-secondary finder-reset" aria-label="Reset caught-Mew inputs" title="Reset caught-Mew inputs to defaults">
+                                <svg viewBox="0 -960 960 960" aria-hidden="true" focusable="false">
+                                    <path d="M520-330v-60h160v60H520Zm60 210v-50h-60v-60h60v-50h60v160h-60Zm100-50v-60h160v60H680Zm40-110v-160h60v50h60v60h-60v50h-60Zm111-280h-83q-26-88-99-144t-169-56q-117 0-198.5 81.5T200-480q0 72 32.5 132t87.5 98v-110h80v240H160v-80h94q-62-50-98-122.5T120-480q0-75 28.5-140.5t77-114q48.5-48.5 114-77T480-840q129 0 226.5 79.5T831-560Z" />
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="help-text">
+                            Missed your target? Catch Mew and enter its stats below.
+                        </p>
+                        <div class="calibration-settings-grid">
+                            <div class="form-group">
+                                <label for="calibration-pressed">
+                                    Target advance
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-pressed" value="" aria-describedby="calibration-timing-help">
+                            </div>
+                            <div class="form-group">
+                                <label for="calibration-start">
+                                    Search start (actual advance)
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-start" value="" aria-describedby="calibration-timing-help">
+                            </div>
+                            <div class="form-group">
+                                <label for="calibration-end">
+                                    Search end (inclusive)
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-end" value="" aria-describedby="calibration-timing-help">
+                            </div>
+                        </div>
+                        <p id="calibration-timing-help" class="help-text finder-note">
+                            Enter target advance to set the search` range to ±1,000 advances (min 0).
+                        </p>
+                        <p class="help-text finder-note">
+                            Enter the stats in the same positions as Mew's summary screen.
+                        </p>
+                        <div class="calibration-stats-grid">
+                            <div class="form-group">
+                                <label for="calibration-hp">
+                                    Maximum HP
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-hp" value="" placeholder="Any" aria-describedby="calibration-stats-help">
+                            </div>
+                            <div class="form-group">
+                                <label for="calibration-spa">
+                                    Sp. Attack
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-spa" value="" placeholder="Any" aria-describedby="calibration-stats-help">
+                            </div>
+                            <div class="form-group">
+                                <label for="calibration-atk">
+                                    Attack
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-atk" value="" placeholder="Any" aria-describedby="calibration-stats-help">
+                            </div>
+                            <div class="form-group">
+                                <label for="calibration-spd">
+                                    Sp. Defense
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-spd" value="" placeholder="Any" aria-describedby="calibration-stats-help">
+                            </div>
+                            <div class="form-group">
+                                <label for="calibration-def">
+                                    Defense
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-def" value="" placeholder="Any" aria-describedby="calibration-stats-help">
+                            </div>
+                            <div class="form-group">
+                                <label for="calibration-spe">
+                                    Speed
+                                </label>
+                                <input type="text" inputmode="numeric" id="calibration-spe" value="" placeholder="Any" aria-describedby="calibration-stats-help">
+                            </div>
+                        </div>
+                        <p id="calibration-stats-help" class="help-text finder-note">
+                            Enter at least one stat; blank stats mean any value.
+                        </p>
+                    </fieldset>
+                    <div class="finder-actionbar">
+                        <div class="button-group finder-actions">
+                            <button type="submit" id="calibration-search" class="btn-primary">Find caught Mew</button>
+                            <button type="button" id="calibration-cancel" class="btn-secondary" disabled>Cancel lookup</button>
+                        </div>
+                    </div>
+                </form>
+                <p id="calibration-status" role="status" aria-live="polite" aria-atomic="true">
+                    Press 'Find caught Mew' to start.
+                </p>
+                <section id="calibration-results" aria-label="Caught Mew candidates" hidden>
+                    <p id="calibration-result-summary" class="help-text"></p>
+                    <div class="table-scroll" role="region" aria-label="Scrollable caught Mew candidates" tabindex="0">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Actual advance</th>
+                                    <th scope="col">Offset</th>
+                                    <th scope="col">Nature</th>
+                                    <th scope="col">Max HP</th>
+                                    <th scope="col">Atk</th>
+                                    <th scope="col">Def</th>
+                                    <th scope="col">SpA</th>
+                                    <th scope="col">SpD</th>
+                                    <th scope="col">Spe</th>
+                                    <th scope="col">Apply offset</th>
+                                </tr>
+                            </thead>
+                            <tbody id="calibration-result-rows"></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination">
+                        <button type="button" id="calibration-previous" class="btn-secondary">Previous</button>
+                        <span id="calibration-page" role="status" aria-live="polite"></span>
+                        <button type="button" id="calibration-next" class="btn-secondary">Next</button>
+                    </div>
+                </section>
+            </section>
         </section>
         <footer>
             Issues? <a href="https://github.com/regularwave/catch-mew" target="_blank" rel="noopener noreferrer">Report them on GitHub.</a>
